@@ -1,0 +1,14 @@
+{
+  "game_name": "Inotia 2",
+  "slug": "inotia2",
+  "project_name": "inotia2",
+  "titleid": "INOTIA2PV",
+  "vita_ip": "192.168.3.15",
+  "vita_port": 1337,
+  "apk_basename": "",
+  "build_dir": "build",
+  "vita_downloads_dir": "/ux0:/downloads",
+  "vita_data_dir": "/ux0:/data",
+  "vita_logs_dir": "/ux0:/data/inotia2",
+  "vita_game_data_dir": "/ux0:/data/inotia2"
+}

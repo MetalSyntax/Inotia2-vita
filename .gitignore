@@ -1,0 +1,21 @@
+# macOS / exFAT
+.DS_Store
+._*
+
+# Juego original: nunca al repo
+game_app
+*.ipa
+/ux0_data/
+/decompiled/
+
+# Build
+/build/
+*.elf
+*.velf
+*.vpk
+eboot.bin
+
+# Consola
+/logs/
+*.psp2dmp
+__pycache__/
