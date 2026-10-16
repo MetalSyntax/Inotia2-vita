@@ -28,5 +28,7 @@ vendor/vitaGL/build/
 # Clang / IDE
 compile_commands.json
 .claude/
+screenshots/
+/release/
 
 

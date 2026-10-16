@@ -40,6 +40,7 @@ typedef struct {
     void *proc, *refcon;
     SceUID thread;
     volatile int running;
+    int started;
 } audio_unit;
 
 static int ok(void) { return 0; }
@@ -54,6 +55,19 @@ static int au_InstanceNew(void *comp, audio_unit **out) {
     return 0;
 }
 
+static int audio_thread(SceSize args, void *argp);
+
+static int au_Start(audio_unit *u) {
+    u->started = 1;
+    if (u->running || !u->proc)
+        return 0;
+    u->running = 1;
+    u->thread = sceKernelCreateThread("coreaudio", audio_thread, 0x10000100, 256 * 1024, 0, 0, NULL);
+    sceKernelStartThread(u->thread, sizeof(u), &u);
+    l_info("AudioOutputUnitStart: hilo iniciado (tid=0x%08X)", u->thread);
+    return 0;
+}
+
 static int au_SetProperty(audio_unit *u, uint32_t id, uint32_t scope, uint32_t elem, const void *data, uint32_t size) {
     if (id == kAudioUnitProperty_StreamFormat) {
         memcpy(&u->fmt, data, sizeof(asbd));
@@ -62,6 +76,13 @@ static int au_SetProperty(audio_unit *u, uint32_t id, uint32_t scope, uint32_t e
     } else if (id == kAudioUnitProperty_SetRenderCallback) {
         u->proc = ((void *const *)data)[0];
         u->refcon = ((void *const *)data)[1];
+        l_info("AudioUnit: SetRenderCallback proc=%p refcon=%p", u->proc, u->refcon);
+        if (u->started && !u->running && u->proc) {
+            u->running = 1;
+            u->thread = sceKernelCreateThread("coreaudio", audio_thread, 0x10000100, 256 * 1024, 0, 0, NULL);
+            sceKernelStartThread(u->thread, sizeof(u), &u);
+            l_info("AudioUnit: hilo iniciado tras SetRenderCallback (tid=0x%08X)", u->thread);
+        }
     }
     return 0;
 }
@@ -99,6 +120,9 @@ static int audio_thread(SceSize args, void *argp) {
         l_error("sceAudioOutOpenPort(%d Hz) = 0x%08X", rate, port);
         return 0;
     }
+    int vol[2] = {32767, 32767};
+    sceAudioOutSetVolume(port, SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH, vol);
+    l_info("sceAudioOutOpenPort(%d Hz, port=%d) volumen fijado a 32767 (0dB)", rate, port);
     uint8_t *raw = malloc(GRAIN * 2 * 4);
     int16_t out[GRAIN * 2];
     uint8_t ts[64] = {0}; // AudioTimeStamp
@@ -131,21 +155,14 @@ static int audio_thread(SceSize args, void *argp) {
     return 0;
 }
 
-static int au_Start(audio_unit *u) {
-    if (u->running || !u->proc)
-        return 0;
-    u->running = 1;
-    u->thread = sceKernelCreateThread("coreaudio", audio_thread, 0x10000100, 256 * 1024, 0, 0, NULL);
-    sceKernelStartThread(u->thread, sizeof(u), &u);
-    return 0;
-}
-
 static int au_Stop(audio_unit *u) {
     if (u->running) {
         u->running = 0;
         sceKernelWaitThreadEnd(u->thread, NULL, NULL);
         sceKernelDeleteThread(u->thread);
+        u->thread = 0;
     }
+    u->started = 0;
     return 0;
 }
 
@@ -163,20 +180,24 @@ static int as_GetProperty(uint32_t id, uint32_t *size, void *data) {
     switch (id) {
     case FOURCC('c', 'h', 's', 'r'): // CurrentHardwareSampleRate (Float64)
         *(double *)data = 44100.0;
-        break;
+        return 0;
     case FOURCC('c', 'h', 'o', 'c'): // CurrentHardwareOutputNumberChannels
         *(uint32_t *)data = 2;
-        break;
+        return 0;
     case FOURCC('c', 'h', 'b', 'd'): // CurrentHardwareIOBufferDuration (Float32)
         *(float *)data = (float)GRAIN / 44100.0f;
-        break;
+        return 0;
     case FOURCC('c', 'h', 'o', 'l'): // CurrentHardwareOutputLatency (Float32)
         *(float *)data = 0.012f;
-        break;
+        return 0;
+    case FOURCC('a', 'c', 'a', 't'): // AudioCategory
+        *(uint32_t *)data = FOURCC('s', 'o', 'l', 'o'); // kAudioSessionCategory_SoloAmbientSound
+        return 0;
     default:
-        l_debug("AudioSessionGetProperty('%c%c%c%c') -> 0", id >> 24, (id >> 16) & 0xFF, (id >> 8) & 0xFF, id & 0xFF);
+        l_info("AudioSessionGetProperty('%c%c%c%c') -> kAudioSessionUnsupportedPropertyError (0x7074793f)",
+               id >> 24, (id >> 16) & 0xFF, (id >> 8) & 0xFF, id & 0xFF);
+        return 0x7074793f; // 'pty?' = kAudioSessionUnsupportedPropertyError
     }
-    return 0;
 }
 
 #define F(name, fn) {"_" #name, (uintptr_t)(fn)}

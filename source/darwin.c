@@ -21,7 +21,7 @@
 
 // ---------------------------------------------------------------- rutas
 
-// Las rutas que arma el juego (NSHomeDirectory, bundle) se redirigen a DATA_PATH.
+// Las rutas que arma el juego (NSHomeDirectory, bundle, FMOD sound banks) se redirigen a BUNDLE_PATH o DATA_PATH.
 const char *darwin_path(const char *in, char *out, size_t outlen) {
     if (!strncmp(in, "ux0:", 4) || !strncmp(in, "ur0:", 4) || !strncmp(in, "app0:", 5)) {
         snprintf(out, outlen, "%s", in);
@@ -29,6 +29,16 @@ const char *darwin_path(const char *in, char *out, size_t outlen) {
     }
     while (*in == '/')
         in++;
+
+    // Probar primero en BUNDLE_PATH (recursos del juego, audio FMOD .fev/.fsb)
+    char bundle_try[512];
+    snprintf(bundle_try, sizeof(bundle_try), BUNDLE_PATH "%s", in);
+    struct stat st;
+    if (stat(bundle_try, &st) == 0) {
+        snprintf(out, outlen, "%s", bundle_try);
+        return out;
+    }
+
     snprintf(out, outlen, DATA_PATH "%s", in);
     return out;
 }

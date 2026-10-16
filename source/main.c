@@ -6,6 +6,7 @@
 #include <psp2/system_param.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/power.h>
 
@@ -65,7 +66,7 @@ int main(void) {
     sceCommonDialogConfigParamInit(&dlg);
     sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_LANG, (int *)&dlg.language);
     sceAppUtilSystemParamGetInt(SCE_SYSTEM_PARAM_ID_ENTER_BUTTON, (int *)&dlg.enterButtonAssign);
-    sceCommonDialogSetConfigParam(&dlg);
+    chdir(BUNDLE_PATH);
     gles_init();
     darwin_init();
     macho_load(BUNDLE_PATH "Inotia2", DATA_PATH "rebase.bin");
@@ -82,6 +83,7 @@ int main(void) {
         input_poll();
         hle_frame();
         uint64_t wait = hle_run_timers();
-        sceKernelDelayThread(wait > 1000 ? 1000 : (SceUInt)wait);
+        if (wait > 0)
+            sceKernelDelayThread(wait > 1000 ? 1000 : (SceUInt)wait);
     }
 }

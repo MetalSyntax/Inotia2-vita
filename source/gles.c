@@ -57,9 +57,18 @@ static const void *fixed_to_float(const array_ptr *a, int n, int slot) {
     int step = a->stride ? a->stride / 4 : a->size;
     const int32_t *src = a->ptr;
     float *dst = conv_buf[slot];
-    for (int i = 0; i < n; i++)
-        for (int c = 0; c < a->size; c++)
-            dst[i * a->size + c] = src[i * step + c] * (1.0f / 65536.0f);
+    const float scale = 1.0f / 65536.0f;
+    if (a->size == 2 && step == 2) {
+        int total = n * 2;
+        for (int i = 0; i < total; i += 2) {
+            dst[i] = src[i] * scale;
+            dst[i + 1] = src[i + 1] * scale;
+        }
+    } else {
+        for (int i = 0; i < n; i++)
+            for (int c = 0; c < a->size; c++)
+                dst[i * a->size + c] = src[i * step + c] * scale;
+    }
     return dst;
 }
 
@@ -113,7 +122,21 @@ static void g_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
     for (int u = 0; u < 2; u++)
         if (tc[u].type == GL_FIXED)
             apply_texcoord(u, n);
+
+    GLint bound_tex = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &bound_tex);
+    GLboolean tex_coord_enabled = glIsEnabled(GL_TEXTURE_COORD_ARRAY);
+    GLboolean tex_2d_enabled = glIsEnabled(GL_TEXTURE_2D);
+    int tex_disabled_here = 0;
+    if (tex_2d_enabled && (bound_tex == 0 || !tex_coord_enabled)) {
+        glDisable(GL_TEXTURE_2D);
+        tex_disabled_here = 1;
+    }
+
     glDrawArrays(mode, first, count);
+
+    if (tex_disabled_here)
+        glEnable(GL_TEXTURE_2D);
 }
 
 static void g_glGetPointerv(GLenum pname, void **out) {
@@ -234,6 +257,7 @@ void gles_present(void) {
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     // Esquinas de pantalla (sup-izq, sup-der, inf-izq, inf-der) -> textura del FBO vertical.
     // ponytail: rotación supuesta (landscape-right: el borde superior del FBO queda a la

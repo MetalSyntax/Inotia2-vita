@@ -27,16 +27,30 @@ static struct {
 static int nprev;
 static uint32_t prev_buttons;
 
-// ponytail: códigos de tecla WIPI supuestos (-1..-4 flechas, -5 OK, -6/-7 soft, -8 borrar); el
-// juego iOS es táctil y quizás ignore teclas. Si no responden, mapear botones a toques fijos.
+// Códigos WIPI para navegación de menús con cruceta/OK
 static const struct {
     uint32_t button;
     int key;
 } keymap[] = {
     {SCE_CTRL_UP, -1}, {SCE_CTRL_DOWN, -2}, {SCE_CTRL_LEFT, -3}, {SCE_CTRL_RIGHT, -4},
-    {SCE_CTRL_CROSS, -5}, {SCE_CTRL_START, -5},
-    {SCE_CTRL_TRIANGLE, -6}, {SCE_CTRL_SELECT, -6},
-    {SCE_CTRL_SQUARE, -7}, {SCE_CTRL_CIRCLE, -8},
+    {SCE_CTRL_CROSS, -5},
+};
+
+// Mapeo de botones físicos a controles táctiles en pantalla (coordenadas 480x320)
+typedef struct {
+    uint32_t button;
+    int x, y;
+} vbutton_map;
+
+static const vbutton_map vbuttons[] = {
+    {SCE_CTRL_CROSS,    439, 275}, // Ataque / Acción principal
+    {SCE_CTRL_SQUARE,   378, 296}, // Habilidad 1 (abajo izquierda)
+    {SCE_CTRL_TRIANGLE, 396, 225}, // Habilidad 2 (medio)
+    {SCE_CTRL_CIRCLE,   450, 210}, // Habilidad 3 (arriba derecha)
+    {SCE_CTRL_L1,       329, 305}, // Poción / Acceso rápido
+    {SCE_CTRL_R1,       145, 288}, // Cambio de rueda / especial
+    {SCE_CTRL_START,    402, 18},  // Menú / Estado (espadas, esquina sup der)
+    {SCE_CTRL_SELECT,   449, 21},  // Mapa (esquina sup der)
 };
 
 void input_init(void) {
@@ -114,5 +128,17 @@ void input_poll(void) {
     for (unsigned k = 0; k < sizeof(keymap) / sizeof(keymap[0]); k++)
         if (changed & keymap[k].button)
             call_guest(clet_event, (buttons & keymap[k].button) ? KEY_PRESS : KEY_RELEASE, keymap[k].key, 0, 0);
+
+    for (unsigned k = 0; k < sizeof(vbuttons) / sizeof(vbuttons[0]); k++) {
+        if (changed & vbuttons[k].button) {
+            if (buttons & vbuttons[k].button) {
+                if (live)
+                    point(vp_touch, TOUCH_PRESS, ev_press, vbuttons[k].x, vbuttons[k].y);
+            } else {
+                if (live)
+                    point(vp_release, TOUCH_RELEASE, ev_release, vbuttons[k].x, vbuttons[k].y);
+            }
+        }
+    }
     prev_buttons = buttons;
 }
