@@ -19,3 +19,4 @@ void macho_hook(const char *name, void *dst);
 // Llama a una función del juego preservando r9 (el código iOS lo usa como temporal). Usar
 // siempre que el llamador NO sea código compilado con -ffixed-r9 (callbacks desde newlib, etc.).
 uint32_t call_guest(void *fn, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
+uint32_t call_guest6(void *fn, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5);

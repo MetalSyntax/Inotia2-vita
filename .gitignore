@@ -19,3 +19,14 @@ eboot.bin
 /logs/
 *.psp2dmp
 __pycache__/
+
+# Vendor vitaGL build artifacts
+vendor/vitaGL/*.a
+vendor/vitaGL/**/*.o
+vendor/vitaGL/build/
+
+# Clang / IDE
+compile_commands.json
+.claude/
+
+

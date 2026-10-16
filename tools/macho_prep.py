@@ -80,10 +80,11 @@ def main():
     syms.sort()
     sym_addrs = [s[0] for s in syms]
     text = next(s for s in sects if s['name'] == '__text')
-    func_entry = {}  # dirección de entrada (con bit thumb) -> nombre
+    func_entry = {}  # dirección de entrada (con y sin bit thumb) -> nombre
     for a, thumb, n in syms:
         if text['addr'] <= a < text['addr'] + text['size']:
-            func_entry[a | 1 if thumb else a] = n
+            func_entry[a] = n
+            func_entry[a | 1] = n
     stubs = next((s for s in sects if s['name'] == '__symbol_stub4'), None)
     if stubs:  # punteros a stubs de imports (p. ej. tablas de funciones) también son válidos
         for a in range(stubs['addr'], stubs['addr'] + stubs['size'], 12):
@@ -166,6 +167,13 @@ def main():
     for owner, hits in owner_hits.items():
         if owner_bad[owner] > owner_ok[owner]:
             dropped.append((owner, owner_ok[owner], owner_bad[owner]))
+            # Conservar punteros que apuntan a un símbolo, función o string legítimo.
+            # En binarios de C con tablas estáticas o structs mixtos, variables adyacentes
+            # no deben descartarse por heurística de mayoría si su destino es un símbolo real.
+            for va, sn, k in hits:
+                if k in ('sym', 'func', 'cstr'):
+                    rebase.append(va)
+                    stats[(sn, k)] += 1
             continue
         for va, sn, k in hits:
             rebase.append(va)
@@ -173,6 +181,13 @@ def main():
     # Los slots locales de __nl_symbol_ptr también son direcciones absolutas: se rebasean.
     rebase += local_ptr_slots
     stats[('__nl_symbol_ptr', 'local')] = len(local_ptr_slots)
+    # __symbol_stub4 no es PIC: `ldr ip,[pc]; ldr pc,[ip]; .long &__la_symbol_ptr[i]` (absoluta).
+    if stubs:
+        stub_lits = list(range(stubs['addr'] + 8, stubs['addr'] + stubs['size'], 12))
+        assert all(read32(a - 8) == 0xE59FC000 and lo <= read32(a) < hi for a in stub_lits), \
+            'formato de __symbol_stub4 inesperado'
+        rebase += stub_lits
+        stats[('__symbol_stub4', 'la_ptr')] = len(stub_lits)
     rebase.sort()
 
     with open(out, 'wb') as f:

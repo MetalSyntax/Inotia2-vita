@@ -7,12 +7,15 @@ static const struct {
     const int *count;
 } tables[] = {
     {darwin_imports, &darwin_imports_count},
+    {gles_imports, &gles_imports_count},
+    {coreaudio_imports, &coreaudio_imports_count},
+    {objc_imports, &objc_imports_count},
 };
 
-uintptr_t imports_lookup(const char *name) {
+const import_entry *imports_lookup(const char *name) {
     for (unsigned t = 0; t < sizeof(tables) / sizeof(tables[0]); t++)
         for (int i = 0; i < *tables[t].count; i++)
             if (!strcmp(tables[t].table[i].name, name))
-                return tables[t].table[i].addr;
-    return 0;
+                return &tables[t].table[i];
+    return NULL;
 }

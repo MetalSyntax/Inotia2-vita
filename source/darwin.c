@@ -1,5 +1,6 @@
 // libc, libgcc y pthread de iOS 3 (Darwin, ARMv6 softfp) sobre newlib de la Vita.
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/threadmgr.h>
@@ -12,6 +13,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "darwin_printf.h"
 #include "hle.h"
 #include "imports.h"
 #include "log.h"
@@ -52,22 +54,46 @@ static int *d___error(void) { return &errno; }
 static void *d___memcpy_chk(void *d, const void *s, size_t n, size_t dn) { return memcpy(d, s, n); }
 static char *d___strcpy_chk(char *d, const char *s, size_t dn) { return strcpy(d, s); }
 
+// ---------------------------------------------------------------- printf con el ABI de Darwin (darwin_printf.c)
+
+static int d_sprintf(char *buf, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    words w = {&ap, NULL};
+    int r = darwin_vformat(buf, INT_MAX, fmt, &w);
+    va_end(ap);
+    return r;
+}
 static int d___sprintf_chk(char *buf, int flag, size_t len, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    int r = vsprintf(buf, fmt, ap);
+    words w = {&ap, NULL};
+    int r = darwin_vformat(buf, len, fmt, &w);
     va_end(ap);
     return r;
+}
+static int d_vsprintf(char *buf, const char *fmt, const uint32_t *ap) {
+    words w = {NULL, ap};
+    return darwin_vformat(buf, INT_MAX, fmt, &w);
+}
+static int d_vsnprintf(char *buf, size_t size, const char *fmt, const uint32_t *ap) {
+    words w = {NULL, ap};
+    return darwin_vformat(buf, size, fmt, &w);
 }
 
 static void d___assert_rtn(const char *func, const char *file, int line, const char *expr) {
     l_error("assert del juego: %s (%s:%d %s)", expr, file, line, func);
 }
 
-// NSLog(@"formato", ...): se registra el formato tal cual (los %@ no se expanden).
+// NSLog(@"formato", ...): el formato es un CFString (cadena C en +8).
 static void d_NSLog(void *cfstr, ...) {
-    const char *s = cfstr ? *(const char **)((uint8_t *)cfstr + 8) : "(nil)";
-    l_info("NSLog: %s", s);
+    char buf[512];
+    va_list ap;
+    va_start(ap, cfstr);
+    words w = {&ap, NULL};
+    darwin_vformat(buf, sizeof(buf), cfstr ? *(const char **)((uint8_t *)cfstr + 8) : "(nil)", &w);
+    va_end(ap);
+    l_info("NSLog: %s", buf);
 }
 
 static int qsort_guest_cmp;
@@ -123,7 +149,6 @@ static int d_net_fail(void) {
 }
 static void *d_gethostbyname(const char *n) { return NULL; }
 static int d_select(int n, void *r, void *w, void *e, void *t) { return 0; }
-static int d_ret0(void) { return 0; }
 
 // ---------------------------------------------------------------- pthread
 
@@ -195,6 +220,33 @@ static int d_pthread_create(pthread_t *thr, const void *darwin_attr, void *fn, v
     l_debug("pthread_create(0x%08X) -> %d", (unsigned)fn - MACHO_SLIDE, r);
     return r;
 }
+static int d_pthread_detach(pthread_t t) {
+    if (!t)
+        return 0;
+    // Si es un SceUID de Sony Vita (0x4001xxxx)
+    if (((uintptr_t)t & 0xFFFF0000) == 0x40010000) {
+        l_info("pthread_detach(SceUID 0x%08X) -> ok", (unsigned)(uintptr_t)t);
+        return 0;
+    }
+    // Si es un puntero a estructura pte_thread_t en memoria de usuario
+    uintptr_t addr = (uintptr_t)t;
+    if (addr >= 0x81000000 && addr < 0x90000000 && (addr & 3) == 0) {
+        uint32_t first = *(uint32_t *)addr;
+        if ((first & 0xFFFF0000) == 0x40010000) {
+            return pthread_detach(t);
+        }
+    }
+    l_info("pthread_detach(%p) ignorado de forma segura", (void *)t);
+    return 0;
+}
+
+static pthread_t d_pthread_self(void) {
+    pthread_t p = pthread_self();
+    if (p)
+        return p;
+    return (pthread_t)sceKernelGetThreadId();
+}
+
 static int d_pthread_setschedparam(pthread_t t, int policy, const void *param) { return 0; }
 
 // Semáforos con nombre (FMOD): sem_t* de Darwin -> UID de la Vita.
@@ -214,13 +266,23 @@ static d_sem *d_sem_open(const char *name, int oflag, ...) {
     return s;
 }
 static int d_sem_close(d_sem *s) {
+    if (!s || s == (d_sem *)-1)
+        return -1;
     sceKernelDeleteSema(s->id);
     free(s);
     return 0;
 }
 static int d_sem_unlink(const char *name) { return 0; }
-static int d_sem_wait(d_sem *s) { return sceKernelWaitSema(s->id, 1, NULL) < 0 ? -1 : 0; }
-static int d_sem_post(d_sem *s) { return sceKernelSignalSema(s->id, 1) < 0 ? -1 : 0; }
+static int d_sem_wait(d_sem *s) {
+    if (!s || s == (d_sem *)-1)
+        return -1;
+    return sceKernelWaitSema(s->id, 1, NULL) < 0 ? -1 : 0;
+}
+static int d_sem_post(d_sem *s) {
+    if (!s || s == (d_sem *)-1)
+        return -1;
+    return sceKernelSignalSema(s->id, 1) < 0 ? -1 : 0;
+}
 
 // ---------------------------------------------------------------- C++ / bloques / excepciones
 
@@ -238,21 +300,6 @@ static void d_Block_object_dispose(void *obj, int flags) {}
 static uint8_t d_dispatch_main_q[64];
 static void *d_dispatch_get_global_queue(long prio, unsigned long flags) { return d_dispatch_main_q; }
 static void d_dispatch_async(void *q, void *block) { l_debug("dispatch_async ignorado"); }
-
-// ---------------------------------------------------------------- ObjC (temporal)
-
-// Hasta tener runtime: registra los primeros envíos de cada selector y devuelve nil/0.
-static uint64_t d_objc_msgSend_log(void *self, const char *sel) {
-    static const char *seen[512];
-    static int nseen;
-    for (int i = 0; i < nseen; i++)
-        if (seen[i] == sel)
-            return 0;
-    if (nseen < 512)
-        seen[nseen++] = sel;
-    l_error("objc_msgSend(%p, %s) -> nil", self, sel);
-    return 0;
-}
 
 // ---------------------------------------------------------------- libgcc softfp (Apple *vfp)
 
@@ -317,22 +364,25 @@ SOFTFP static double m_ldexp(double x, int e) { return ldexp(x, e); }
 
 // ---------------------------------------------------------------- tabla
 
+// name sin el "_" que agrega Mach-O: F(__divsi3, ...) registra "___divsi3".
 #define F(name, fn) {"_" #name, (uintptr_t)(fn)}
 #define D(name) {"_" #name, (uintptr_t)(name)} // misma firma en newlib
+#define V(name, ptr) {"_" #name, (uintptr_t)(ptr), 1} // variable, no función
 
 const import_entry darwin_imports[] = {
     // memoria / cadenas
     D(malloc), D(calloc), D(realloc), D(free), D(memcpy), D(memmove), D(memset), D(memcmp),
     D(memchr), D(bzero), D(strlen), D(strcmp), D(strcpy), D(strncpy), D(strstr), D(strtok),
-    D(atoi), D(rand), D(srand), D(sprintf), D(vsprintf), D(vsnprintf), D(sscanf), D(puts),
-    F(qsort, d_qsort), F(__ZdlPv, free),
-    F(___memcpy_chk, d___memcpy_chk), F(___strcpy_chk, d___strcpy_chk),
-    F(___sprintf_chk, d___sprintf_chk), F(___assert_rtn, d___assert_rtn), F(___error, d___error),
+    D(atoi), D(rand), D(srand), F(sprintf, d_sprintf), F(vsprintf, d_vsprintf),
+    F(vsnprintf, d_vsnprintf), D(sscanf), D(puts),
+    F(qsort, d_qsort), F(_ZdlPv, free),
+    F(__memcpy_chk, d___memcpy_chk), F(__strcpy_chk, d___strcpy_chk),
+    F(__sprintf_chk, d___sprintf_chk), F(__assert_rtn, d___assert_rtn), F(__error, d___error),
     F(NSLog, d_NSLog),
     // stdio
     F(fopen, d_fopen), D(fclose), D(fread), D(fwrite), D(fseek), D(ftell), D(feof), D(ferror),
-    D(fflush), D(fputs), F(mkdir, d_mkdir), D(close), F(___stderrp, &d_stderrp),
-    F(___stdinp, &d_stdinp),
+    D(fflush), D(fputs), F(mkdir, d_mkdir), D(close), V(__stderrp, &d_stderrp),
+    V(__stdinp, &d_stdinp),
     // tiempo / sistema
     D(gettimeofday), F(usleep, d_usleep), F(mach_absolute_time, d_mach_absolute_time),
     F(mach_timebase_info, d_mach_timebase_info), F(sysctlbyname, d_sysctlbyname), F(exit, d_exit),
@@ -341,10 +391,8 @@ const import_entry darwin_imports[] = {
     F(accept, d_net_fail), F(send, d_net_fail), F(recv, d_net_fail), F(setsockopt, d_net_fail),
     F(fcntl, d_net_fail), F(inet_addr, d_net_fail), F(gethostbyname, d_gethostbyname),
     F(select, d_select),
-    // llega por __nl_symbol_ptr (puntero a función): necesita código, no un bloque de datos
-    F(AudioSessionRemovePropertyListenerWithUserData, d_ret0),
     // pthread / semáforos
-    F(pthread_create, d_pthread_create), D(pthread_detach), D(pthread_self),
+    F(pthread_create, d_pthread_create), F(pthread_detach, d_pthread_detach), F(pthread_self, d_pthread_self),
     F(pthread_setschedparam, d_pthread_setschedparam), F(pthread_mutex_init, d_pthread_mutex_init),
     F(pthread_mutex_lock, d_pthread_mutex_lock), F(pthread_mutex_unlock, d_pthread_mutex_unlock),
     F(pthread_mutex_destroy, d_pthread_mutex_destroy), F(pthread_mutexattr_init, d_pthread_mutexattr_init),
@@ -352,26 +400,25 @@ const import_entry darwin_imports[] = {
     F(sem_close, d_sem_close), F(sem_unlink, d_sem_unlink), F(sem_wait, d_sem_wait),
     F(sem_post, d_sem_post),
     // C++ / bloques / excepciones / GCD
-    F(___cxa_atexit, d___cxa_atexit), F(___cxa_guard_acquire, d___cxa_guard_acquire),
-    F(___cxa_guard_release, d___cxa_guard_release), F(___cxa_pure_virtual, d___cxa_pure_virtual),
-    F(__Unwind_SjLj_Register, d_sjlj_noop), F(__Unwind_SjLj_Unregister, d_sjlj_noop),
-    F(__Unwind_SjLj_Resume, d_sjlj_resume), F(__NSConcreteStackBlock, d_NSConcreteStackBlock),
-    F(__Block_object_assign, d_Block_object_assign), F(__Block_object_dispose, d_Block_object_dispose),
-    F(__dispatch_main_q, d_dispatch_main_q), F(dispatch_get_global_queue, d_dispatch_get_global_queue),
+    F(__cxa_atexit, d___cxa_atexit), F(__cxa_guard_acquire, d___cxa_guard_acquire),
+    F(__cxa_guard_release, d___cxa_guard_release), F(__cxa_pure_virtual, d___cxa_pure_virtual),
+    F(_Unwind_SjLj_Register, d_sjlj_noop), F(_Unwind_SjLj_Unregister, d_sjlj_noop),
+    F(_Unwind_SjLj_Resume, d_sjlj_resume), V(_NSConcreteStackBlock, d_NSConcreteStackBlock),
+    F(_Block_object_assign, d_Block_object_assign), F(_Block_object_dispose, d_Block_object_dispose),
+    V(_dispatch_main_q, d_dispatch_main_q), F(dispatch_get_global_queue, d_dispatch_get_global_queue),
     F(dispatch_async, d_dispatch_async),
-    F(objc_msgSend, d_objc_msgSend_log),
     // softfp
-    F(___addsf3vfp, f_add), F(___subsf3vfp, f_sub), F(___mulsf3vfp, f_mul), F(___divsf3vfp, f_div),
-    F(___adddf3vfp, d_add), F(___subdf3vfp, d_sub), F(___muldf3vfp, d_mul),
-    F(___eqsf2vfp, f_eq), F(___nesf2vfp, f_ne), F(___gtsf2vfp, f_gt), F(___gesf2vfp, f_ge),
-    F(___ltsf2vfp, f_lt), F(___lesf2vfp, f_le), F(___gtdf2vfp, dd_gt), F(___gedf2vfp, dd_ge),
-    F(___ltdf2vfp, dd_lt), F(___extendsfdf2vfp, f_ext), F(___truncdfsf2vfp, d_trunc),
-    F(___fixsfsivfp, f_toi), F(___fixdfsivfp, d_toi), F(___fixsfdi, f_toll), F(___fixdfdi, d_toll),
-    F(___fixunssfdi, f_toull), F(___floatsisfvfp, i_tof), F(___floatunssisfvfp, u_tof),
-    F(___floatsidfvfp, i_tod), F(___floatdidf, ll_tod), F(___floatdisf, ll_tof),
-    F(___divsi3, i_div), F(___modsi3, i_mod), F(___udivsi3, u_div), F(___umodsi3, u_mod),
-    F(___divdi3, ll_div), F(___moddi3, ll_mod), F(___muldi3, ll_mul), F(___udivdi3, ull_div),
-    F(___umoddi3, ull_mod), F(___cmpdi2, ll_cmp),
+    F(__addsf3vfp, f_add), F(__subsf3vfp, f_sub), F(__mulsf3vfp, f_mul), F(__divsf3vfp, f_div),
+    F(__adddf3vfp, d_add), F(__subdf3vfp, d_sub), F(__muldf3vfp, d_mul),
+    F(__eqsf2vfp, f_eq), F(__nesf2vfp, f_ne), F(__gtsf2vfp, f_gt), F(__gesf2vfp, f_ge),
+    F(__ltsf2vfp, f_lt), F(__lesf2vfp, f_le), F(__gtdf2vfp, dd_gt), F(__gedf2vfp, dd_ge),
+    F(__ltdf2vfp, dd_lt), F(__extendsfdf2vfp, f_ext), F(__truncdfsf2vfp, d_trunc),
+    F(__fixsfsivfp, f_toi), F(__fixdfsivfp, d_toi), F(__fixsfdi, f_toll), F(__fixdfdi, d_toll),
+    F(__fixunssfdi, f_toull), F(__floatsisfvfp, i_tof), F(__floatunssisfvfp, u_tof),
+    F(__floatsidfvfp, i_tod), F(__floatdidf, ll_tod), F(__floatdisf, ll_tof),
+    F(__divsi3, i_div), F(__modsi3, i_mod), F(__udivsi3, u_div), F(__umodsi3, u_mod),
+    F(__divdi3, ll_div), F(__moddi3, ll_mod), F(__muldi3, ll_mul), F(__udivdi3, ull_div),
+    F(__umoddi3, ull_mod), F(__cmpdi2, ll_cmp),
     // math softfp
     F(acosf, m_acosf), F(cosf, m_cosf), F(sinf, m_sinf), F(tanf, m_tanf), F(expf, m_expf),
     F(logf, m_logf), F(log10f, m_log10f), F(floorf, m_floorf), F(lrintf, m_lrintf), F(cos, m_cos),

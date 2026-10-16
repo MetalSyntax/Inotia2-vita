@@ -74,8 +74,10 @@ static uint32_t *thunk_head, *thunk_end;
 static const char **unimpl_names;
 static int unimpl_count;
 
-// El thunk carga su índice en r12 y salta a ml_unimpl_entry (asm.S).
+// Thunks (asm.S): ml_unimpl_entry recibe en r12 el índice del import faltante; ml_align_call
+// recibe en r12 la función nuestra a la que hay que entrar con la pila alineada.
 extern void ml_unimpl_entry(void);
+extern void ml_align_call(void);
 
 void ml_unimpl_log(int idx) {
     static uint8_t seen[4096];
@@ -85,16 +87,15 @@ void ml_unimpl_log(int idx) {
     }
 }
 
-static uintptr_t make_unimpl_thunk(const char *name) {
+// ldr ip, =ip_value; ldr pc, =jump
+static uintptr_t make_thunk(uint32_t ip_value, void *jump) {
     if (thunk_head + 4 > thunk_end)
         fatal_error("arena de thunks llena");
-    unimpl_names = realloc(unimpl_names, (unimpl_count + 1) * sizeof(char *));
-    unimpl_names[unimpl_count] = name;
     uint32_t code[4] = {
-        0xE59FC004, // ldr ip, [pc, #4]
-        0xE59FF000, // ldr pc, [pc, #0]
-        (uint32_t)unimpl_count++,
-        (uint32_t)&ml_unimpl_entry,
+        0xE59FC000, // ldr ip, [pc, #0]   (= code[2])
+        0xE59FF000, // ldr pc, [pc, #0]   (= code[3])
+        ip_value,
+        (uint32_t)jump,
     };
     uintptr_t addr = (uintptr_t)thunk_head;
     kuKernelCpuUnrestrictedMemcpy(thunk_head, code, sizeof(code));
@@ -104,9 +105,28 @@ static uintptr_t make_unimpl_thunk(const char *name) {
 }
 
 // Imports de datos sin implementar: bloque en cero (leer da 0/NULL en vez de instrucciones).
+static uintptr_t make_unimpl_thunk(const char *name) {
+    unimpl_names = realloc(unimpl_names, (unimpl_count + 1) * sizeof(char *));
+    unimpl_names[unimpl_count] = name;
+    return make_thunk(unimpl_count++, ml_unimpl_entry);
+}
+
+// Imports de datos sin implementar: un bloque en cero por símbolo (leer da 0/NULL en vez de
+// instrucciones). Todas las referencias al mismo símbolo comparten el bloque, como con dyld.
 static uintptr_t make_unimpl_data(const char *name) {
+    static struct {
+        const char *name;
+        uintptr_t addr;
+    } blocks[256];
+    static int nblocks;
+    for (int i = 0; i < nblocks; i++)
+        if (!strcmp(blocks[i].name, name))
+            return blocks[i].addr;
     l_error("unimpl (dato): %s", name);
-    return (uintptr_t)calloc(1, 64);
+    uintptr_t addr = (uintptr_t)calloc(1, 64);
+    if (nblocks < 256)
+        blocks[nblocks++] = (typeof(blocks[0])){name, addr};
+    return addr;
 }
 
 static uint32_t *word_ptr(uint32_t vmaddr) {
@@ -118,9 +138,9 @@ static uint32_t *word_ptr(uint32_t vmaddr) {
 }
 
 static uintptr_t resolve(const char *name, int is_lazy) {
-    uintptr_t addr = imports_lookup(name);
-    if (addr)
-        return addr;
+    const import_entry *e = imports_lookup(name);
+    if (e)
+        return e->data ? e->addr : make_thunk(e->addr, ml_align_call);
     return is_lazy ? make_unimpl_thunk(name) : make_unimpl_data(name);
 }
 
@@ -230,6 +250,36 @@ int macho_load(const char *bin_path, const char *rebase_path) {
     free(rebase);
     l_info("rebase: %u palabras", (unsigned)rh[1]);
 
+    // Rebases adicionales de seguridad: garantiza que punteros a funciones y estructuras
+    // críticas (como _DlgProc_nState en 0x001AAB3C, callbacks de CSX/WV y FMOD) queden
+    // rebaseados incluso si el usuario sólo instala el VPK sin actualizar rebase.bin en ux0:data.
+    static const uint32_t extra_rebases[] = {
+        0x0019E6C4, 0x0019E6E0, 0x0019FC4C, 0x0019FE50, 0x0019FEA4, 0x001A0060, 0x001A00C4, 0x001A00C8,
+        0x001A00D4, 0x001A025C, 0x001A02F0, 0x001A1B08, 0x001A1B38, 0x001A1B4C, 0x001A1C60, 0x001A1D54,
+        0x001A1D68, 0x001A1DA0, 0x001A1E38, 0x001A1F0C, 0x001A1F54, 0x001A20D4, 0x001A2258, 0x001A22BC,
+        0x001A2354, 0x001A260C, 0x001A28B0, 0x001A28C0, 0x001A2B00, 0x001A2B34, 0x001A2B54, 0x001A2BC8,
+        0x001A2BD4, 0x001A2DC4, 0x001A2DCC, 0x001A2E5C, 0x001A2EE0, 0x001A2F3C, 0x001A304C, 0x001A3090,
+        0x001A30C8, 0x001A319C, 0x001A3698, 0x001A36A0, 0x001A39C8, 0x001A3A2C, 0x001A3FC8, 0x001A3FD8,
+        0x001A4054, 0x001A41A0, 0x001A41A4, 0x001A41FC, 0x001A44B8, 0x001A4D48, 0x001A4D6C, 0x001A4F98,
+        0x001A5044, 0x001A505C, 0x001A5164, 0x001A5188, 0x001A51F0, 0x001A7C64, 0x001A7C8C, 0x001A7C9C,
+        0x001A7CB0, 0x001A7CD0, 0x001A7D30, 0x001A7D54, 0x001A7D64, 0x001A7D94, 0x001A7DF4, 0x001A7E68,
+        0x001A7F6C, 0x001A7F80, 0x001A7FE0, 0x001A80AC, 0x001AAB3C, 0x001AB738, 0x001AB744, 0x001AB78C,
+        0x001AB798, 0x001AB7D4, 0x001AB7F0, 0x001AB80C, 0x001AB87C, 0x001ABA7C, 0x001ABBF4, 0x001ABCAC,
+        0x001ABCFC, 0x001ABD24, 0x001ABD54, 0x001ABDCC, 0x001ABDF8, 0x001ABE14, 0x001ABFB0, 0x001ABFB4,
+        0x001AC1B0, 0x001AC25C, 0x001AC464, 0x001ACB70, 0x001ACEA8, 0x001B57B0, 0x001B5918, 0x001B59D0,
+        0x001B5A90, 0x001B65E0, 0x001BBD58, 0x001BBD64, 0x001BBDB8, 0x001BBFC8, 0x001BC5CC
+    };
+    int extra_count = 0;
+    for (size_t i = 0; i < sizeof(extra_rebases) / sizeof(extra_rebases[0]); i++) {
+        uint32_t *w = word_ptr(extra_rebases[i]);
+        if (w && *w < MACHO_SLIDE) {
+            *w += MACHO_SLIDE;
+            extra_count++;
+        }
+    }
+    if (extra_count > 0)
+        l_info("rebase extra (fallback): %d punteros rebaseados", extra_count);
+
     // Imports por la tabla de símbolos indirectos.
     uint32_t *indirect = (uint32_t *)(file + dysym->indirectsymoff);
     int n_imports = 0;
@@ -262,6 +312,23 @@ int macho_load(const char *bin_path, const char *rebase_path) {
         n_imports++;
     }
     l_info("imports: %d slots, %d sin implementar", n_imports, unimpl_count);
+
+    // Parche a _LoadString (0x0003290A):
+    // El juego tiene un error donde en _LoadString hace `adds r0, r4, #0` (0x1C20),
+    // pasando el puntero &_SAVE_FILE_NAME en vez de desreferenciarlo para obtener
+    // el offset asignado por _SetMediaSize. En iOS sin slide (0x001aab20) caía dentro del
+    // buffer de medios de 8 MB sin crashear, pero con MACHO_SLIDE (0x981aab20) desborda
+    // y causa Data Abort. Lo corregimos con `ldr r0, [r4, #0]` (0x6820).
+    if (text_size > (0x3290a - text_vm + 2)) {
+        uint16_t *ins = (uint16_t *)(text_buf + (0x3290a - text_vm));
+        if (*ins == 0x1C20) {
+            *ins = 0x6820; // ldr r0, [r4, #0]
+            l_info("Parche aplicado a _LoadString (0x0003290A): adds r0, r4 -> ldr r0, [r4]");
+        } else {
+            l_warn("Parche _LoadString: opcode esperado 0x1C20, encontrado 0x%04X", *ins);
+        }
+    }
+
 
     kuKernelCpuUnrestrictedMemcpy((void *)text_real, text_buf, text_size);
     kuKernelFlushCaches((void *)text_real, text_size);
@@ -326,7 +393,7 @@ void macho_hook(const char *name, void *dst) {
             fatal_error("hook: %s mide %u bytes, no entra el salto", name, (unsigned)(next - s->n_value));
         patch[0] = 0xE51FF004; // ldr pc, [pc, #-4]
     }
-    patch[1] = (uint32_t)dst;
+    patch[1] = make_thunk((uint32_t)dst, ml_align_call); // entra con la pila alineada
     kuKernelCpuUnrestrictedMemcpy((void *)addr, patch, sizeof(patch));
     kuKernelFlushCaches((void *)(addr & ~3), 16);
 }

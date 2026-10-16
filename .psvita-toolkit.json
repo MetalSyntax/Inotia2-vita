@@ -9,6 +9,7 @@
   "build_dir": "build",
   "vita_downloads_dir": "/ux0:/downloads",
   "vita_data_dir": "/ux0:/data",
-  "vita_logs_dir": "/ux0:/data/inotia2",
-  "vita_game_data_dir": "/ux0:/data/inotia2"
+  "vita_logs_dir": "/ux0:/data/inotia2/logs",
+  "vita_game_data_dir": "/ux0:/data/inotia2",
+  "platform": "ios"
 }
