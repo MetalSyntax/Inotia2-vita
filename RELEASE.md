@@ -91,18 +91,18 @@ tools/stage_data.sh /path/to/Payload/Inotia2.app
 
 ## 🎮 Controls
 
-| PS Vita Input | Virtual / In-Game Action |
-| :--- | :--- |
-| **D-Pad / Left Stick** | Character movement & menu navigation |
-| **Cross (✖)** | Attack / Primary Action / Dialogue Confirm |
-| **Square (◼)** | Skill 1 (Fireball / Lower skill slot) |
-| **Triangle (▲)** | Skill 2 (Middle skill slot) |
-| **Circle (●)** | Skill 3 (Upper skill slot) |
-| **L Trigger** | Potion / Quick Item slot |
-| **R Trigger** | Skill Wheel Toggle / Special Action |
-| **Start** | Inventory & Status Menu (Swords icon) |
-| **Select** | Minimap & World Map |
-| **Touchscreen** | Full touch interface available at all times |
+| PS Vita Input | Virtual / In-Game Action | Status |
+| :--- | :--- | :---: |
+| **Front Touchscreen** | Full touch interface available at all times | ✅ Working |
+| **D-Pad / Left Stick** | Character movement & menu navigation | ✅ Working |
+| **Cross (✖)** | Attack / Primary Action / Dialogue Confirm | ✅ Working |
+| **Square (◼)** | Skill 1 (Fireball / Lower skill slot) | ✅ Working |
+| **Triangle (▲)** | Skill 2 (Middle skill slot) | ✅ Working |
+| **Circle (●)** | Skill 3 (Upper skill slot) | ✅ Working |
+| **L Trigger** | Potion / Quick Item slot | ⚠️ In progress |
+| **R Trigger** | Skill Wheel Toggle / Special Action | ⚠️ In progress |
+| **Start** | Inventory & Status Menu (Swords icon) | ⚠️ In progress |
+| **Select** | Minimap & World Map | ⚠️ In progress |
 
 ---
 

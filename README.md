@@ -24,7 +24,7 @@ The game boots, loads assets, navigates menus, creates/loads character slots, an
 
 - [x] **Mach-O loader**: loads the iOS ARMv6 executable, applies relocations (including safety fallbacks for symbol/data pointers), resolves ~400 Darwin/Apple imports (bridging 4-byte stack alignment and unaligned variadic arguments), runs C++ static initializers (FMOD), and enters the main game loop. *Verified on console.*
 - [x] **Graphics**: GLES 1.1 → vitaGL. The game renders into a 320×480 framebuffer, rotated and scaled to 816×544 (centered) on present with hardware acceleration. Apple CgBI PNG textures are decoded natively without file conversion. *Verified on console.*
-- [x] **Touch & Controls**: Front touchscreen provides full touch input. Physical controls are fully mapped: D-Pad / Left Stick for movement, Cross for attack/action, Square/Triangle/Circle for skills, L1 for potion, R1 for skill toggle, Start for inventory menu, and Select for map. *Verified on console.*
+- [x] **Touch & Controls**: Front touchscreen provides full touch input. Physical controls: D-Pad, Left Stick, Cross (attack/action), and Square/Triangle/Circle (skills) are verified working on console; triggers and menu buttons are in progress. *Verified on console.*
 - [x] **Text & Fonts**: UIKit text rendering is backed by FreeType with PS Vita system fonts (Latin, Korean, Japanese), plus system keyboard integration. *Verified on console.*
 - [x] **Audio**: FMOD Ex runs natively with CoreAudio redirected to `sceAudioOut` BGM port with volume configured to max (0 dB). *Verified on console.*
 - [ ] **Videos**: `prologue.mp4` / `epilogue.mp4` are currently skipped.
@@ -71,18 +71,19 @@ This software does NOT contain original game code, binaries, copyrighted graphic
 | **Square (◼)** | Skill 1 (Primary / Lower active skill) | ✅ Working |
 | **Triangle (▲)** | Skill 2 (Middle active skill) | ✅ Working |
 | **Circle (●)** | Skill 3 (Upper active skill) | ✅ Working |
-| **L Trigger** | Potion / Quick Item slot | ✅ Working |
-| **R Trigger** | Skill Wheel Switch / Special | ✅ Working |
-| **Start** | Inventory / Status Menu | ✅ Working |
-| **Select** | Minimap / World Map | ✅ Working |
+| **L Trigger** | Potion / Quick Item slot | ⚠️ In progress |
+| **R Trigger** | Skill Wheel Switch / Special | ⚠️ In progress |
+| **Start** | Inventory / Status Menu | ⚠️ In progress |
+| **Select** | Minimap / World Map | ⚠️ In progress |
 
 > [!TIP]
-> The port maps all physical buttons to their corresponding on-screen virtual coordinates seamlessly, while also retaining D-Pad and Cross for native menu navigation. You can also touch the screen directly at any time.
+> The original game was designed for full touch input. All UI buttons and virtual controls on the screen can be touched directly at any time.
 
 ---
 
 ## Known Issues
 
+- **Controls in progress**: L/R Triggers, Start, and Select are in progress. Virtual V-pad touch handling is currently erratic and undergoing refinement.
 - **Videos skipped**: intro and ending cutscene movies are currently skipped.
 - **Online features disabled**: App Store in-app purchases, Com2uS "More Games" and online leaderboards/network play are disabled by design.
 - **Crash dumps** are written by the system to `ux0:data/` (not to the game folder).
@@ -126,8 +127,8 @@ A crash PC in `0x98xxxxxx` minus `0x98000000` is the address in the Mach-O: insp
 ## Credits & Acknowledgments
 
 - **The Chronicles of Inotia 2: A Wanderer of Luone** is intellectual property of **Com2uS**.
+- **Inotia 3 PS Vita Port** by [MetalSyntax](https://github.com/MetalSyntax/Inotia3-vita) for engine research and architectural insights.
 - **vitaGL** graphics library by [Rinnegatamante](https://github.com/Rinnegatamante/vitaGL).
 - **kubridge** plugin by [Bythos](https://github.com/bythos14/kubridge).
 - **FreeType**, **libpng** and **zlib** projects.
-- Engine knowledge shared with the [Inotia 3 PS Vita port](../Inotia3-vita).
 - Special thanks to the PS Vita homebrew and porting community.
