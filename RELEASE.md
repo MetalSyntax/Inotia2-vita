@@ -1,109 +1,114 @@
 # Inotia 2: A Wanderer of Luone (PS Vita) — Beta Release v1.0
 
-## 📦 Contenido de la Release
+## 📦 Release Package Contents
 
-El paquete de lanzamiento incluye:
-1. **`inotia2.vpk`**: Instalable para PlayStation Vita con el loader Mach-O nativo, compatibilidad OpenGL ES 1.1 vía vitaGL, FreeType y soporte de controles físicos y táctiles.
-2. **`rebase.bin`**: Tabla binaria de reubicaciones (9.314 direcciones de memoria absoluta) generada específicamente para el ejecutable iOS ARMv6 de *Inotia 2* (versión 1.1.41).
+The release distribution includes:
+1. **`inotia2.vpk`**: PlayStation Vita application package containing the native Mach-O loader, hardware-accelerated OpenGL ES 1.1 via vitaGL, FreeType font rendering, and physical/touch controls integration.
+2. **`rebase.bin`**: Binary relocation table (9,314 absolute 32-bit memory pointers) generated specifically for the iOS ARMv6 executable of *Inotia 2* (version 1.1.41).
 
 ---
 
-## 🛠️ ¿Qué es y Cómo se Crea `rebase.bin`?
+## 🛠️ What is `rebase.bin` and How is it Created?
 
-### ¿Por qué existe `rebase.bin`?
-1. **Diferencia de arquitectura de memoria**:
-   * En iOS 3 (iPhone OS), los ejecutables no-PIE (`MH_EXECUTE`) se enlazaban para cargarse en la dirección virtual fija `0x00001000`.
-   * En la PlayStation Vita, el rango de direcciones por debajo de `0x81000000` está reservado por el kernel de PlayStation Vita OS y no puede ser reservado por procesos de usuario (`kuKernelAllocMemBlock`).
-   * Por tanto, el loader traslada todo el binario de iOS a memoria alta aplicando un desplazamiento constante:
+### Why is `rebase.bin` Required?
+
+1. **Memory Architecture Constraints**:
+   * On iOS 3 (iPhone OS), the official executable (`Inotia2`) was compiled as a non-PIE (`MH_EXECUTE`) binary hard-linked to virtual base address `0x00001000`.
+   * On PlayStation Vita OS, the entire address space below `0x81000000` is reserved for the kernel and cannot be mapped by userland applications (`kuKernelAllocMemBlock`).
+   * Therefore, the loader shifts the entire Mach-O image into high memory by adding a constant offset:
      $$\text{MACHO\_SLIDE} = \text{0x98000000}$$
-2. **Falta de reubicaciones locales en el binario original**:
-   * Apple elimina las tablas de reubicación local (`nlocrel = 0`) al empaquetar aplicaciones para la App Store.
-   * Aunque el código ejecutable ARMv6 suele usar direccionamiento relativo al PC (`ldr r0, [pc, #offset]`), los **segmentos de datos (`__DATA`, `__const`)** contienen miles de punteros absolutos de 32 bits a vtables de C++, estructuras del motor, callbacks de FMOD y cadenas de texto.
-   * Sin modificar esos punteros, al intentar acceder a una función o tabla, la CPU saltaría a `0x0001XXXX` (memoria no asignada), provocando un cierre inmediato por `Prefetch Abort` o `Data Abort` (código de error `0x80010016` o crash dump `.psp2dmp`).
-3. **El rol de `rebase.bin`**:
-   * Es un archivo binario simple y ultrarrápido que le indica al loader exactamente en qué direcciones de memoria debe sumar `MACHO_SLIDE` al arrancar el juego.
 
-### Formato de `rebase.bin`:
-* **Offset 0x00 (4 bytes)**: Magic `'RBS1'` (`0x31534252`).
-* **Offset 0x04 (4 bytes)**: Número total de palabras de 32 bits a reubicar ($N$).
-* **Offset 0x08 ($N \times 4$ bytes)**: Lista secuencial de direcciones virtuales (vmaddr) donde residen los punteros absolutos que deben sumarse con `MACHO_SLIDE`.
+2. **Absence of Local Relocation Tables in App Store Binaries**:
+   * When building release binaries for the App Store, Apple strips local relocation records (`nlocrel = 0`).
+   * While ARMv6 machine code in the text segment primarily relies on PC-relative addressing (`ldr r0, [pc, #offset]`), the **data segments (`__DATA`, `__const`)** contain thousands of absolute 32-bit pointers pointing to C++ vtables, internal engine structures, FMOD sound callbacks, and string literals.
+   * Without sliding these pointers, whenever the CPU attempts to call a function pointer or dereference an internal table, it branches to unmapped memory (`0x0001XXXX`), causing an immediate crash via `Prefetch Abort` or `Data Abort` (error `0x80010016` or `.psp2dmp` crash dump).
 
-### ¿Cómo se Genera `rebase.bin` paso a paso?
-Se utiliza el script `tools/macho_prep.py` incluido en el repositorio:
+3. **The Role of `rebase.bin`**:
+   * It provides a compact, high-speed lookup table telling the loader exactly which memory addresses in the binary need to have `MACHO_SLIDE` added during startup.
+
+### Binary Structure of `rebase.bin`:
+* **Offset 0x00 (4 bytes)**: Magic header `'RBS1'` (`0x31534252`).
+* **Offset 0x04 (4 bytes)**: Total count ($N$) of 32-bit words to relocate (9,314 words).
+* **Offset 0x08 ($N \times 4$ bytes)**: Sequential array of 32-bit virtual addresses (`vmaddr`) where absolute pointers reside.
+
+### Step-by-Step Generation of `rebase.bin`
+
+`rebase.bin` is generated using the [`tools/macho_prep.py`](file:///Volumes/TOSHIBA%20EXT/PSVITA%20Develop/Inotia2-vita/tools/macho_prep.py) script included in the repository:
 
 ```bash
-# 1. Asegúrate de tener Python 3 instalado
-python3 -I tools/macho_prep.py <ruta/al/binario/Inotia2> <ruta/de/salida/rebase.bin> [--report reporte.txt]
+# Prerequisites: Python 3
+python3 -I tools/macho_prep.py <path/to/Inotia2> <path/to/output/rebase.bin> [--report report.txt]
 
-# Ejemplo real usado en el proyecto:
+# Example used in the repository:
 python3 -I tools/macho_prep.py ux0_data/inotia2/Inotia2.app/Inotia2 ux0_data/inotia2/rebase.bin --report ux0_data/macho_report.txt
 ```
 
-O utilizando el script automatizado:
+Alternatively, use the automated staging pipeline:
 ```bash
-tools/stage_data.sh /ruta/a/Inotia2.app
+tools/stage_data.sh /path/to/Payload/Inotia2.app
 ```
 
-#### ¿Qué hace internamente `macho_prep.py`?
-1. **Analiza las cabeceras Mach-O**: Lee los comandos de carga `LC_SEGMENT`, `LC_SYMTAB` y `LC_DYSYMTAB`.
-2. **Reconstruye el mapa de símbolos**: Como el ejecutable oficial no tiene strip de símbolos internos, extrae todas las funciones, tablas, cadenas (`__cstring`) y variables globales con sus direcciones reales.
-3. **Escaneo heurístico de punteros**:
-   * Recorre todas las palabras de 32 bits en los segmentos `__DATA` y `__TEXT` (excluyendo código ya resuelto por relocs dinámicas externas).
-   * Valida si el valor de cada palabra apunta exactamente al inicio de una función válida (teniendo en cuenta el bit Thumb `+1`), una cadena terminada en nulo, o una variable definida en la tabla de símbolos.
-   * Descarta tablas densas de enteros y datos falsos positivos mediante análisis de densidad por objeto propietario.
-4. **Exporta el archivo final**: Empaqueta la lista ordenada de direcciones en `rebase.bin`.
+#### How `macho_prep.py` Operates Internally:
+1. **Parses Mach-O Headers**: Decodes `LC_SEGMENT`, `LC_SYMTAB`, and `LC_DYSYMTAB` load commands.
+2. **Reconstructs the Symbol Map**: Because the official binary was not stripped of internal symbol names, it extracts all functions, data labels, and string literals (`__cstring`) alongside their original virtual addresses.
+3. **Heuristic Pointer Scanning**:
+   * Scans all 32-bit words across `__DATA` and `__TEXT` (excluding dynamic symbol stubs resolved at runtime).
+   * Verifies if each candidate points to a valid function entry point (taking the Thumb `+1` bit into account), a null-terminated string, or an object in the symbol table.
+   * Discards accidental integer/text table matches using object-owner density heuristics.
+4. **Outputs `rebase.bin`**: Writes the sorted list of valid addresses into the binary file.
 
 ---
 
-## 🚀 Guía de Instalación para Usuarios
+## 🚀 Player Installation Guide
 
-1. **Requisitos en la PS Vita**:
-   * Custom Firmware (Enso 3.60 / 3.65 recomendado).
-   * Plugin `kubridge.skprx` instalado bajo `*KERNEL` en `ur0:tai/config.txt`.
-   * `libshacccg.suprx` instalado en `ur0:data/` (se obtiene con ShaRKBR33D).
+1. **PS Vita Requirements**:
+   * Custom Firmware (Enso 3.60 / 3.65 recommended).
+   * `kubridge.skprx` kernel plugin active under `*KERNEL` in `ur0:tai/config.txt`.
+   * `libshacccg.suprx` runtime present in `ur0:data/` (obtainable via ShaRKBR33D).
 
-2. **Instalación de archivos del juego**:
-   * Copia la carpeta `Inotia2.app` (extraída del IPA de iOS 1.1.41) en `ux0:data/inotia2/Inotia2.app/`.
-   * Copia el archivo `rebase.bin` en `ux0:data/inotia2/rebase.bin`.
-   * Estructura requerida en la consola:
+2. **Game Assets Setup**:
+   * Extract `Payload/Inotia2.app/` from your decrypted iOS 1.1.41 `.ipa`.
+   * Copy the `Inotia2.app/` folder to `ux0:data/inotia2/Inotia2.app/`.
+   * Copy `rebase.bin` to `ux0:data/inotia2/rebase.bin`.
+   * Required directory layout on the Vita:
      ```text
      ux0:data/inotia2/
      ├── Inotia2.app/
-     │   ├── Inotia2 (binario iOS)
+     │   ├── Inotia2 (original iOS binary)
      │   ├── Inotia.fev
      │   ├── Inotia_bank00.fsb
      │   ├── Inotia_bank01.fsb
      │   ├── *.png, *.dat, *.c2e, etc.
      ├── rebase.bin
-     ├── saves/ (creada automáticamente al jugar)
-     └── logs/  (creada automáticamente para diagnósticos)
+     ├── saves/ (created automatically on first launch)
+     └── logs/  (created automatically for diagnostic logs)
      ```
 
-3. **Instalación del VPK**:
-   * Instala `inotia2.vpk` usando VitaShell.
+3. **Install the VPK**:
+   * Transfer and install `inotia2.vpk` using VitaShell.
 
 ---
 
-## 🎮 Controles
+## 🎮 Controls
 
-| Botón PS Vita | Acción Virtual |
+| PS Vita Input | Virtual / In-Game Action |
 | :--- | :--- |
-| **Cruceta / Stick Izquierdo** | Movimiento del personaje y navegación en menús |
-| **Cruz (✖)** | Ataque / Acción principal / Confirmar diálogo |
-| **Cuadrado (◼)** | Habilidad 1 (Fuego / Habilidad inferior) |
-| **Triángulo (▲)** | Habilidad 2 (Habilidad media) |
-| **Círculo (●)** | Habilidad 3 (Habilidad superior) |
-| **Gatillo L1** | Poción / Acceso rápido de objeto |
-| **Gatillo R1** | Alternar rueda de habilidades / Acción especial |
-| **Start** | Menú de inventario / Estado (Icono espadas) |
-| **Select** | Minimapa / Mapa general |
-| **Pantalla Táctil** | Control táctil completo disponible en todo momento |
+| **D-Pad / Left Stick** | Character movement & menu navigation |
+| **Cross (✖)** | Attack / Primary Action / Dialogue Confirm |
+| **Square (◼)** | Skill 1 (Fireball / Lower skill slot) |
+| **Triangle (▲)** | Skill 2 (Middle skill slot) |
+| **Circle (●)** | Skill 3 (Upper skill slot) |
+| **L Trigger** | Potion / Quick Item slot |
+| **R Trigger** | Skill Wheel Toggle / Special Action |
+| **Start** | Inventory & Status Menu (Swords icon) |
+| **Select** | Minimap & World Map |
+| **Touchscreen** | Full touch interface available at all times |
 
 ---
 
-## 📋 Registro de Cambios (v1.0-beta)
+## 📋 Changelog (v1.0-beta)
 
-* **Pantalla negra eliminada**: Se corrigió el problema de modulado de textura en vitaGL cuando el personaje recibía daño.
-* **Mapeo de controles**: Los botones físicos de la consola se mapearon a los controles virtuales del juego.
-* **Rendimiento**: Optimización en la conversión de arrays de vértices, logrando 20-30 FPS estables.
-* **CoreAudio / FMOD**: Integración de llamadas de inicialización de volumen y resolución de rutas de paquetes de audio.
+* **Damage Black Flash Fixed**: Corrected texture modulation in vitaGL during damage overlay rendering so the red flash displays without blacking out the screen.
+* **Physical Control Mapping**: Full mapping of PlayStation Vita hardware buttons to the virtual HUD touch points.
+* **Performance Enhancements**: Optimized vertex array float conversion loops, delivering a steady 20–30 FPS in gameplay.
+* **CoreAudio / FMOD Integration**: Added BGM port volume initialization and bundle path asset redirection.
