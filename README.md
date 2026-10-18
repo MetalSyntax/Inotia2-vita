@@ -23,10 +23,11 @@ An unofficial, native **iOS-to-PS Vita wrapper port** of *The Chronicles of Inot
 The game boots, loads assets, navigates menus, creates/loads character slots, and is fully playable on physical PlayStation Vita hardware.
 
 - [x] **Mach-O loader**: loads the iOS ARMv6 executable, applies relocations (including safety fallbacks for symbol/data pointers), resolves ~400 Darwin/Apple imports (bridging 4-byte stack alignment and unaligned variadic arguments), runs C++ static initializers (FMOD), and enters the main game loop. *Verified on console.*
-- [x] **Graphics**: GLES 1.1 → vitaGL. The game renders into a 320×480 framebuffer, rotated and scaled to 816×544 (centered) on present with hardware acceleration. Apple CgBI PNG textures are decoded natively without file conversion. *Verified on console.*
-- [x] **Touch & Controls**: Front touchscreen provides full touch input. Physical controls: D-Pad, Left Stick, Cross (attack/action), and Square/Triangle/Circle (skills) are verified working on console; triggers and menu buttons are in progress. *Verified on console.*
+- [x] **Graphics**: GLES 1.1 → vitaGL. The game renders into a 320×480 framebuffer, rotated and stretched to full screen (960×544) on present with hardware acceleration. Apple CgBI PNG textures are decoded natively without file conversion. *Verified on console.*
+- [x] **Touch & Controls**: Front touchscreen provides full touch input. All physical controls (D-Pad, Left Stick, face buttons, L/R, Start/Select) are mapped and verified working on console. *Verified on console.*
 - [x] **Text & Fonts**: UIKit text rendering is backed by FreeType with PS Vita system fonts (Latin, Korean, Japanese), plus system keyboard integration. *Verified on console.*
-- [x] **Audio**: FMOD Ex runs natively with CoreAudio redirected to `sceAudioOut` BGM port with volume configured to max (0 dB). *Verified on console.*
+- [x] **Audio**: FMOD Ex runs natively (BGM and sound effects in menus and in-game) with CoreAudio redirected to `sceAudioOut`. FMOD's VFPv2 vector-mode mixers, unsupported on the Cortex-A9, are replaced with scalar versions. *Verified on console.*
+- [x] **Settings & saves**: game options (control type, auto-save, volume) and save games persist between sessions. *Verified on console.*
 - [ ] **Videos**: `prologue.mp4` / `epilogue.mp4` are currently skipped.
 - [x] **Offline bypasses**: App Store, "More Games", network, browser links, and anti-piracy checks are gracefully bypassed.
 
@@ -71,10 +72,10 @@ This software does NOT contain original game code, binaries, copyrighted graphic
 | **Square (◼)** | Skill 1 (Primary / Lower active skill) | ✅ Working |
 | **Triangle (▲)** | Skill 2 (Middle active skill) | ✅ Working |
 | **Circle (●)** | Skill 3 (Upper active skill) | ✅ Working |
-| **L Trigger** | Potion / Quick Item slot | ⚠️ In progress |
-| **R Trigger** | Skill Wheel Switch / Special | ⚠️ In progress |
-| **Start** | Inventory / Status Menu | ⚠️ In progress |
-| **Select** | Minimap / World Map | ⚠️ In progress |
+| **L Trigger** | Potion / Quick Item slot | ✅ Working |
+| **R Trigger** | Skill Wheel Switch / Special | ✅ Working |
+| **Start** | Inventory / Status Menu | ✅ Working |
+| **Select** | Minimap / World Map | ✅ Working |
 
 > [!TIP]
 > The original game was designed for full touch input. All UI buttons and virtual controls on the screen can be touched directly at any time.
@@ -83,7 +84,6 @@ This software does NOT contain original game code, binaries, copyrighted graphic
 
 ## Known Issues
 
-- **Controls in progress**: L/R Triggers, Start, and Select are in progress. Virtual V-pad touch handling is currently erratic and undergoing refinement.
 - **Videos skipped**: intro and ending cutscene movies are currently skipped.
 - **Online features disabled**: App Store in-app purchases, Com2uS "More Games" and online leaderboards/network play are disabled by design.
 - **Crash dumps** are written by the system to `ux0:data/` (not to the game folder).

@@ -1,4 +1,4 @@
-# Inotia 2: A Wanderer of Luone (PS Vita) — Beta Release v1.0
+# Inotia 2: A Wanderer of Luone (PS Vita) — Beta Release v1.1
 
 ## 📦 Release Package Contents
 
@@ -99,12 +99,19 @@ tools/stage_data.sh /path/to/Payload/Inotia2.app
 | **Square (◼)** | Skill 1 (Fireball / Lower skill slot) | ✅ Working |
 | **Triangle (▲)** | Skill 2 (Middle skill slot) | ✅ Working |
 | **Circle (●)** | Skill 3 (Upper skill slot) | ✅ Working |
-| **L Trigger** | Potion / Quick Item slot | ⚠️ In progress |
-| **R Trigger** | Skill Wheel Toggle / Special Action | ⚠️ In progress |
-| **Start** | Inventory & Status Menu (Swords icon) | ⚠️ In progress |
-| **Select** | Minimap & World Map | ⚠️ In progress |
+| **L Trigger** | Potion / Quick Item slot | ✅ Working |
+| **R Trigger** | Skill Wheel Toggle / Special Action | ✅ Working |
+| **Start** | Inventory & Status Menu (Swords icon) | ✅ Working |
+| **Select** | Minimap & World Map | ✅ Working |
 
 ---
+
+## 📋 Changelog (v1.1-beta)
+
+* **Sound Fixed**: FMOD now finds `Inotia.fev` (the media path was being duplicated), and its VFPv2 vector-mode mixers/resampler, which crashed on the Vita's Cortex-A9, are replaced with scalar versions. BGM and sound effects play in menus and in-game.
+* **Full Screen**: the image is stretched to the full 960×544 screen (no more side bars); touch mapping updated to match.
+* **Settings Persist**: control type, auto-save and other options are now saved correctly (`config1.sav` was opened in append mode and reset on every launch). Expect one last reset of your options on the first launch of this version.
+* **All Controls Mapped**: L/R triggers, Start and Select now work alongside the D-Pad, stick and face buttons.
 
 ## 📋 Changelog (v1.0-beta)
 

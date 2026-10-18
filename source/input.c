@@ -1,7 +1,7 @@
 // Touch + botones de la Vita -> eventos del motor, replicando -[EAGLView touchesBegan/Moved/Ended]:
 // primero el pad virtual (VP_*); si no consumió el toque, handleCletEvent + EVENT_POINT_*.
 // Coordenadas del juego: apaisado 480x320, como se ve en pantalla (gles.c lo dibuja en
-// 816x544 centrado).
+// 960x544, estirado a pantalla completa).
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 #include <string.h>
@@ -15,8 +15,8 @@
 #define KEY_PRESS 2
 #define KEY_RELEASE 3
 
-#define DST_W 816
-#define DST_X 72
+#define DST_W 960
+#define DST_X 0
 
 static void *vp_touch, *vp_move, *vp_release, *clet_event, *ev_press, *ev_move, *ev_release;
 static uint8_t *sleep_key;
@@ -36,22 +36,42 @@ static const struct {
     {SCE_CTRL_CROSS, -5},
 };
 
-// Mapeo de botones físicos a controles táctiles en pantalla (coordenadas 480x320)
-typedef struct {
-    uint32_t button;
-    int x, y;
-} vbutton_map;
+// Botones físicos -> toque sobre un botón del pad virtual. La posición se lee del pool de objetos
+// del juego (_VP_objList, 30 x 0x88 bytes, lo llena make_vpbutton según Config_GetControl), así
+// sirve para los dos modos de control. Campos: +0 estado (1 = en uso), +0x1c/+0x30 x/y del área
+// táctil, +0x44/+0x58 ancho/alto, +0x80 tipo.
+#define VP_OBJS 30
+#define VP_OBJ_SIZE 0x88
 
-static const vbutton_map vbuttons[] = {
-    {SCE_CTRL_CROSS,    439, 275}, // Ataque / Acción principal
-    {SCE_CTRL_SQUARE,   378, 296}, // Habilidad 1 (abajo izquierda)
-    {SCE_CTRL_TRIANGLE, 396, 225}, // Habilidad 2 (medio)
-    {SCE_CTRL_CIRCLE,   450, 210}, // Habilidad 3 (arriba derecha)
-    {SCE_CTRL_L1,       329, 305}, // Poción / Acceso rápido
-    {SCE_CTRL_R1,       145, 288}, // Cambio de rueda / especial
-    {SCE_CTRL_START,    402, 18},  // Menú / Estado (espadas, esquina sup der)
-    {SCE_CTRL_SELECT,   449, 21},  // Mapa (esquina sup der)
+static const struct {
+    uint32_t button;
+    int type;
+} vbuttons[] = {
+    {SCE_CTRL_CROSS, -5},         // ataque (solo en el modo con pad)
+    {SCE_CTRL_SQUARE, 0x34},      // habilidad 1
+    {SCE_CTRL_TRIANGLE, 0x35},    // habilidad 2
+    {SCE_CTRL_CIRCLE, 0x36},      // habilidad 3
+    {SCE_CTRL_RTRIGGER, 0x37},    // habilidad 4
+    {SCE_CTRL_LTRIGGER, 0x38},    // ranura de objeto
+    {SCE_CTRL_START, 0x64},       // dragón: menú
+    {SCE_CTRL_SELECT, 0x65},      // icono sup. derecho
 };
+static struct {
+    int x, y;
+} vpressed[sizeof(vbuttons) / sizeof(vbuttons[0])];
+static uint8_t *vp_objs;
+
+static int vp_find(int type, int *x, int *y) {
+    for (int i = 0; vp_objs && i < VP_OBJS; i++) {
+        const int32_t *o = (const int32_t *)(vp_objs + i * VP_OBJ_SIZE);
+        if (o[0] == 1 && o[0x80 / 4] == type) {
+            *x = o[0x1c / 4] + o[0x44 / 4] / 2;
+            *y = o[0x30 / 4] + o[0x58 / 4] / 2;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 void input_init(void) {
     sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
@@ -64,6 +84,7 @@ void input_init(void) {
     ev_move = (void *)macho_sym("_EVENT_POINT_MOVE");
     ev_release = (void *)macho_sym("_EVENT_POINT_RELEASE");
     sleep_key = (uint8_t *)macho_sym("_g_SleepKey");
+    vp_objs = (uint8_t *)macho_sym("_VP_objList");
 }
 
 static void to_game(const SceTouchReport *r, int *x, int *y) {
@@ -130,14 +151,16 @@ void input_poll(void) {
             call_guest(clet_event, (buttons & keymap[k].button) ? KEY_PRESS : KEY_RELEASE, keymap[k].key, 0, 0);
 
     for (unsigned k = 0; k < sizeof(vbuttons) / sizeof(vbuttons[0]); k++) {
-        if (changed & vbuttons[k].button) {
-            if (buttons & vbuttons[k].button) {
-                if (live)
-                    point(vp_touch, TOUCH_PRESS, ev_press, vbuttons[k].x, vbuttons[k].y);
-            } else {
-                if (live)
-                    point(vp_release, TOUCH_RELEASE, ev_release, vbuttons[k].x, vbuttons[k].y);
-            }
+        if (!(changed & vbuttons[k].button))
+            continue;
+        if (buttons & vbuttons[k].button) {
+            vpressed[k].x = -1;
+            if (live && vp_find(vbuttons[k].type, &vpressed[k].x, &vpressed[k].y))
+                point(vp_touch, TOUCH_PRESS, ev_press, vpressed[k].x, vpressed[k].y);
+        } else if (vpressed[k].x >= 0) {
+            if (live)
+                point(vp_release, TOUCH_RELEASE, ev_release, vpressed[k].x, vpressed[k].y);
+            vpressed[k].x = -1;
         }
     }
     prev_buttons = buttons;

@@ -3,7 +3,7 @@
 // El juego dibuja en el renderbuffer vertical de 320x480 que en iOS crea EAGLView (con su propia
 // rotación a apaisado en la proyección). Acá ese renderbuffer es un FBO con textura del mismo
 // tamaño: viewport, scissor y glCopyTexImage2D siguen en el espacio de iOS sin tocar nada. Al
-// presentar (gles_present) el FBO se dibuja girado y escalado sobre la pantalla de 960x544.
+// presentar (gles_present) el FBO se dibuja girado y estirado a toda la pantalla de 960x544.
 //
 // Todos los gl* importados tienen solo argumentos enteros/punteros (variantes *x): no hay
 // problema de softfp. Los arrays GL_FIXED se convierten a float justo antes de dibujar.
@@ -20,10 +20,10 @@
 #define FB_H 480
 #define SCR_W 960
 #define SCR_H 544
-// Rectángulo destino: 480x320 escalado al alto de la Vita (1,7x) y centrado.
+// Rectángulo destino: 480x320 estirado a 960x544 (2x / 1,7x).
 #define DST_H SCR_H
-#define DST_W (DST_H * FB_H / FB_W)
-#define DST_X ((SCR_W - DST_W) / 2)
+#define DST_W SCR_W // estirado a pantalla completa (sin barras laterales)
+#define DST_X 0
 
 #define GL_FRAMEBUFFER_COMPLETE_OES 0x8CD5
 #define GL_RENDERBUFFER_WIDTH_OES 0x8D42

@@ -17,6 +17,7 @@
 #include "cgbi.h"
 #include "gles.h"
 #include "hle.h"
+#include "imports.h"
 #include "log.h"
 #include "macho.h"
 
@@ -48,7 +49,7 @@ static int cs_fsOpen(const char *name, int mode, int attr) {
     const char *m;
     switch (mode) {
     case 1: m = "rb"; break;  // lectura
-    case 2: m = "ab"; break;  // append (crea)
+    case 2: m = "r+b"; break; // fileHandleForWritingAtPath: desde 0, sin crear ni truncar
     case 4: m = "wb"; break;  // escritura truncando (crea)
     case 8: m = "r+b"; break; // lectura/escritura (crea)
     default: return M_E_INVALID;
@@ -389,6 +390,32 @@ static void cs_grpFlushLcd(void) {
 
 // ---------------------------------------------------------------- audio
 
+// CSX_fmodInitialize pide FMOD_INIT_ENABLE_PROFILE (0x20): el profiler abre un socket, que acá
+// falla, y EventSystem::init devuelve error -> nunca se llega a cargar Inotia.fev (sin sonido).
+static int fmod_EventSystem_Init(void **sys, int maxch, unsigned flags, void *extra, unsigned evflags) {
+    if (!sys)
+        return 37;
+    int r = call_guest6((*(void ***)sys)[0], (uint32_t)sys, maxch, flags & ~0x20u, (uint32_t)extra, evflags, 0);
+    l_info("FMOD_EventSystem_Init(%d, 0x%X) = %d", maxch, flags, r);
+    return r;
+}
+
+// Los mezcladores *_SIMD y el resampler lineal de FMOD usan el modo vectorial de VFPv2 (FPSCR.LEN),
+// que el Cortex-A9 no tiene: instrucción indefinida en el hilo de mezcla. Versiones escalares.
+SOFTFP static void fmod_MixMonoToStereo(const float *in, float *out, unsigned n, float l, float r) {
+    for (unsigned i = 0; i < n; i++) {
+        out[2 * i] += in[i] * l;
+        out[2 * i + 1] += in[i] * r;
+    }
+}
+
+SOFTFP static void fmod_MixStereoToStereo(const float *in, float *out, unsigned n, float l, float r) {
+    for (unsigned i = 0; i < n; i++) {
+        out[2 * i] += in[2 * i] * l;
+        out[2 * i + 1] += in[2 * i + 1] * r;
+    }
+}
+
 // La ruta del .fev sale de [[NSBundle mainBundle] resourcePath] (objc.c). Los .fsb están al lado:
 // se fija el media path para que FMOD los busque ahí y no en el directorio actual.
 static int fmod_EventSystem_Load(void **sys, const char *name, void *info, void *project) {
@@ -396,6 +423,10 @@ static int fmod_EventSystem_Load(void **sys, const char *name, void *info, void 
         return 37; // FMOD_ERR_INVALID_HANDLE
     if (!name || !*name)
         name = BUNDLE_PATH "Inotia.fev";
+    // EventSystemI::load abre mediaPath + name (strcpy+strcat): con la ruta completa queda duplicada
+    // ("…/Inotia2.app/ux0:…/Inotia.fev") y da FMOD_ERR_FILE_NOTFOUND (23). Pasar solo el nombre.
+    if (strrchr(name, '/'))
+        name = strrchr(name, '/') + 1;
     call_guest((void *)macho_sym("__ZN4FMOD12EventSystemI12setMediaPathEPKc"), (uint32_t)sys, (uint32_t)BUNDLE_PATH, 0, 0);
     int r = call_guest((*(void ***)sys)[9], (uint32_t)sys, (uint32_t)name, (uint32_t)info, (uint32_t)project);
     l_info("FMOD_EventSystem_Load(%s) = %d", name, r);
@@ -524,7 +555,12 @@ void hle_cs_install(void) {
     macho_hook("_MC_fsRemove", mc_fsRemove);
     macho_hook("_MC_fsAvailable", mc_fsAvailable);
     macho_hook("___utilCreateTextureDataFromIphoneSDK", util_CreateTextureData);
+    macho_hook("_FMOD_EventSystem_Init", fmod_EventSystem_Init);
     macho_hook("_FMOD_EventSystem_Load", fmod_EventSystem_Load);
+    macho_hook("_FMOD_DSP_Connection_MixMonoToStereo_SIMD", fmod_MixMonoToStereo);
+    macho_hook("_FMOD_DSP_Connection_MixStereoToStereo_SIMD", fmod_MixStereoToStereo);
+    // ponytail: mismos argumentos que Linear pero sin interpolar (algo de aliasing); portar Linear a C si se nota.
+    macho_hook("_FMOD_Resampler_Linear", (void *)macho_sym("_FMOD_Resampler_NoInterp"));
     macho_hook("_playMoviePlayer", play_movie);
     macho_hook("_endMoviePlayer", noop);
     macho_hook("_StartMoreGames", start_more_games);
