@@ -1,4 +1,4 @@
-# Inotia 2: A Wanderer of Luone (PS Vita) — Beta Release v1.1
+# Inotia 2: A Wanderer of Luone (PS Vita) — Beta Release v1.2
 
 ## 📦 Release Package Contents
 
@@ -101,10 +101,35 @@ tools/stage_data.sh /path/to/Payload/Inotia2.app
 | **Circle (●)** | Skill 3 (Upper skill slot) | ✅ Working |
 | **L Trigger** | Potion / Quick Item slot | ✅ Working |
 | **R Trigger** | Skill Wheel Toggle / Special Action | ✅ Working |
-| **Start** | Inventory & Status Menu (Swords icon) | ✅ Working |
+| **Start** | Inventory & Status Menu (opens and closes cleanly) | ✅ Working |
 | **Select** | Minimap & World Map | ✅ Working |
+| **Start + Select** | Port options & enhancements menu (game paused) | ✅ Working |
+| **L + R** | Quick Hotkey: Toggle Virtual Buttons / HUD (0% opacity) | ✅ Working |
+| **Select + R** | Quick Hotkey: Cycle FPS mode (20 FPS ↔ 30 FPS ↔ 60 FPS) | ✅ Working |
+| **L + R + Triangle** | Quick Hotkey: Cycle Graphics Filter | ✅ Working |
+| **L + R + Square** | Quick Hotkey: Cycle Aspect Ratio Mode | ✅ Working |
 
 ---
+
+## 📋 Changelog (v1.2-beta)
+
+* **In-Game Menu Close via START**: Pressing **START** now cleanly opens AND closes the in-game dragon / inventory menu (restoring game state and playing the close sound). In the port options menu (**Start + Select**), both **START** and **Circle** save and close.
+* **Virtual Buttons / Clean HUD (0% Opacity)**: Added ability to completely hide on-screen buttons, skills, and D-pad with 0% opacity via runtime hook (`_VP_drawObjects`). Press **L + R** together to toggle a clean HUD. Physical buttons and touchscreen areas remain 100% active.
+* **Graphics Enhancer Filters**: Real-time post-processing shaders:
+  - `Sharp Pixel-Art 2x (Crisp)` (Nearest-neighbor 2x).
+  - `Smooth Bilinear 2x` (Bilinear filtering).
+  - `Vibrant OLED/LCD (Crisp)` (Sharp pixels + 15% color vibrancy and contrast boost).
+  - `Vibrant OLED/LCD (Smooth)` (Smooth bilinear + 15% color vibrancy and contrast boost).
+  - Quick hotkey `L + R + Triangle` to cycle filters anytime during gameplay.
+* **Aspect Ratio Modes**: Selectable aspect ratios preserving proper geometry or utilizing the full Vita display:
+  - `Aspect Ratio 3:2 Fit (816x544)`: Original iOS pixel geometry with minimal side borders.
+  - `Fullscreen Stretch (960x544)`: Stretched across the 16:9 Vita screen.
+  - `Integer 1x Center (480x320)`: 1x native pixel resolution.
+  - Touchscreen coordinates dynamically scale and match each aspect mode.
+  - Quick hotkey `L + R + Square` to cycle aspect ratio.
+* **Port Options & Button Remapping Menu**: Access via **Start + Select** (pauses the game). Allows live button remapping, audio/language selection, HUD visibility, filter, and aspect ratio. Saved to `ux0:data/inotia2/controls.txt`.
+* **Full Spanish & Portuguese Localization Support**: Ready for translated text packages (`lang/spa/` and `lang/por/`) with on-the-fly language switching.
+* **Target Frame Rate (UI Mockup)**: Added frame rate selector in options menu and `Select + R` hotkey (`20 FPS (ORIGINAL)`, `30 FPS (Mockup)`, `60 FPS (Mockup)`). *Note: The game engine natively runs at 20 FPS fixed ticks; higher framerate modes are experimental UI placeholders.*
 
 ## 📋 Changelog (v1.1-beta)
 

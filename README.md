@@ -90,9 +90,10 @@ The game pauses and an overlay lists:
 - **Button remapping**: Attack / OK, Skill 1–4, Quick item, Menu and Map can be moved to any face button, L, R, Start or Select (one button per action; picking a button that is already used swaps both). D-pad / left stick stay as movement. Saved to `ux0:data/inotia2/controls.txt` (hand-editable: `ACTION = BUTTON` per line).
 - **Text language**: ENGLISH / ESPAÑOL / PORTUGUÊS (see below).
 - **Target Frame Rate**:
-  - `20 FPS (ORIGINAL)`: Native Com2uS 50ms game tick interval.
-  - `30 FPS (Forced)`: Scaled 33ms game ticks for a smoother, accelerated experience.
-  - `60 FPS (Forced)`: Scaled 16ms game ticks for maximum smoothness.
+  - `20 FPS (ORIGINAL)`: Native Com2uS 50ms engine tick rate (active gameplay framerate).
+  - `30 FPS (Mockup)`: UI layout / experimental placeholder.
+  - `60 FPS (Mockup)`: UI layout / experimental placeholder.
+  *(Note: The Com2uS engine is internally hardcoded around 20 FPS fixed ticks; higher framerate modes are currently experimental UI mockups).*
 - **Virtual Buttons (HUD)**: `SHOWN` or `HIDDEN` (toggles on-screen D-pad and action/skill buttons with 0% opacity via runtime hook, leaving a clean gameplay view while preserving touch capabilities). Can also be toggled anytime with the `L + R` hotkey combo.
 - **Graphics Filter**:
   - `Sharp Pixel-Art 2x (Crisp)`: Nearest-neighbor filtering for razor-sharp pixel graphics.

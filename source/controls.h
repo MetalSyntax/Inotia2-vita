@@ -14,7 +14,7 @@ uint32_t controls_binding(int action); // SCE_CTRL_* asignado a la acción
 // Carpeta con strindex.dat/strdata.dat traducidos (DATA_PATH "lang/spa/"), NULL = inglés.
 const char *controls_lang_path(void);
 
-// FPS mode (0 = 20 FPS ORIGINAL, 1 = 30 FPS FORCED, 2 = 60 FPS FORCED)
+// FPS mode (0 = 20 FPS ORIGINAL, 1 = 30 FPS MOCKUP, 2 = 60 FPS MOCKUP)
 int controls_get_fps_mode(void);
 void controls_set_fps_mode(int mode);
 void controls_toggle_fps(void);

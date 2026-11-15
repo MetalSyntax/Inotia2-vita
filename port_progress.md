@@ -98,12 +98,9 @@ Detalle y arquitectura en `PORTING_PLAN.md`.
 - [x] **Mejoras Gráficas y Rendimiento (como Zenonia 2 y Destinia)**:
   - **Filtros Gráficos**: Sharp Pixel-Art (Nearest-neighbor 2x), Smooth Bilinear, Vibrant OLED Crisp (+15% brillo/contraste), Vibrant OLED Smooth.
   - **Relación de Aspecto (Aspect Ratio)**: 3:2 Fit nativo (816×544 con bandas laterales limpias), Fullscreen Stretch (960×544), Integer 1x Centrado (480×320). La calibración táctil (`to_game` en `input.c`) escala dinámicamente según el viewport activo.
-  - **Optimizaciones de FPS y escalado de timers**:
-    - El motor original de Com2uS fija el bucle de juego con un temporizador WIPI de 50 ms (`1000 / 50 = 20 FPS`). Por tanto, cambiar únicamente el swap interval de EGL mantenía el juego limitado a 20 FPS.
-    - Se implementó escalado dinámico de temporizadores en `cs_knlSetTimer()` (`source/hle_cs.c`):
-      - `20 FPS (ORIGINAL)`: temporizador intacto a 50 ms (velocidad idéntica al original de iOS).
-      - `30 FPS (Forced)`: temporizadores escalados por factor 20/30 (~33 ms), acelerando los ticks de lógica y render a 30 FPS fluidos.
-      - `60 FPS (Forced)`: temporizadores escalados por factor 20/60 (~16 ms), forzando el bucle a 60 FPS ultra fluidos.
+  - **Opciones de FPS en Menú (Maquetado / Mockup)**:
+    - El motor original de Com2uS está fuertemente acoplado a un temporizador fijo de 50 ms (`20 FPS`). Los modos `30 FPS (Mockup)` y `60 FPS (Mockup)` están presentes en la interfaz y en los controles como maquetación / placeholder experimental, pero el juego se mantiene en sus 20 FPS originales.
+    - Se deja `20 FPS (ORIGINAL)` como el modo estándar funcional.
   - **Ocultamiento de Botones Virtuales (HUD Limpio con 0% de opacidad)**:
     - Se parchea dinámicamente la función de renderizado de la cruceta táctil, botones de acción y poderes (`_VP_drawObjects` en `0x000499bc`): se escribe `0x4770` (`bx lr`) para ocultarlos completamente (0% de opacidad), o `0xb580` (`push {r7, lr}`) para restaurarlos.
     - El área táctil y los objetos de control en `_VP_objList` permanecen intactos, permitiendo usar los botones físicos con una pantalla de juego totalmente limpia sin HUD invasivo.

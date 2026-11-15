@@ -297,7 +297,7 @@ static void text(int x, int y, uint32_t c, const char *s) { ui_text_rgba(menu_px
 static void render(void) {
     fill(0, MENU_H, C_BG);
     text(40, 16, C_HEAD, "PS VITA SETTINGS & CONTROLS");
-    static const char *fps_labels[] = {"20 FPS (ORIGINAL)", "30 FPS (Forced)", "60 FPS (Forced)"};
+    static const char *fps_labels[] = {"20 FPS (ORIGINAL)", "30 FPS (Mockup)", "60 FPS (Mockup)"};
     for (int r = 0; r < ROW_COUNT; r++) {
         int y = 46 + r * 28;
         if (r == cursor)

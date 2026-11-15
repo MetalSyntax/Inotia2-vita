@@ -209,7 +209,7 @@ static int s_fps_mode = 0;
 void gles_set_fps_mode(int mode) {
     s_fps_mode = mode;
     eglSwapInterval(eglGetDisplay(EGL_DEFAULT_DISPLAY), 1);
-    l_info("FPS mode: %s", mode == 1 ? "30 FPS (Forced)" : mode == 2 ? "60 FPS (Forced)" : "20 FPS (ORIGINAL)");
+    l_info("FPS mode: %s", mode == 1 ? "30 FPS (Mockup)" : mode == 2 ? "60 FPS (Mockup)" : "20 FPS (ORIGINAL)");
 }
 
 int gles_get_fps_mode(void) {

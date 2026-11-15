@@ -12,7 +12,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 set(VITA_APP_NAME "Inotia 2")
 set(VITA_TITLEID "INOTIA2PV")
 set(VITA_VPKNAME "inotia2")
-set(VITA_VERSION "01.00")
+set(VITA_VERSION "01.20")
 set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
 
 set(DATA_PATH "ux0:data/inotia2/" CACHE STRING "Datos del juego (con / final)")
