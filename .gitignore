@@ -32,3 +32,6 @@ screenshots/
 /release/
 
 
+
+# Traducciones (texto del juego): no van al repo; el paquete se arma con scripts/inotia2_lang.py
+/inotia2_translation/

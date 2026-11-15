@@ -10,6 +10,7 @@
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/power.h>
 
+#include "controls.h"
 #include "gles.h"
 #include "hle.h"
 #include "log.h"
@@ -72,6 +73,7 @@ int main(void) {
     macho_load(BUNDLE_PATH "Inotia2", DATA_PATH "rebase.bin");
     hle_cs_install();
     input_init();
+    controls_init();
     macho_run_inits();
 
     uintptr_t start = macho_sym("_startClet");
@@ -80,6 +82,12 @@ int main(void) {
     l_info("startClet volvió; entrando al bucle de timers");
 
     for (;;) {
+        if (controls_menu_active()) { // juego en pausa: solo se redibuja el último frame + menú
+            input_menu_poll();
+            gles_present();
+            sceKernelDelayThread(16000);
+            continue;
+        }
         input_poll();
         hle_frame();
         uint64_t wait = hle_run_timers();

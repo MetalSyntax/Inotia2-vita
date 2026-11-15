@@ -65,6 +65,8 @@ add_executable(${CMAKE_PROJECT_NAME}
   source/input.c
   source/cgbi.c
   source/darwin_printf.c
+  source/controls.c
+  source/graphics_enhancer.c
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}

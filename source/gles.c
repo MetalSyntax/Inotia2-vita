@@ -11,7 +11,9 @@
 #include <string.h>
 #include <vitaGL.h>
 
+#include "controls.h"
 #include "gles.h"
+#include "graphics_enhancer.h"
 #include "hle.h"
 #include "imports.h"
 #include "log.h"
@@ -202,14 +204,26 @@ static void g_glGetRenderbufferParameterivOES(GLenum target, GLenum pname, GLint
 
 // ---------------------------------------------------------------- init / present
 
+static int s_fps_original = 0;
+
+void gles_set_fps_mode(int original) {
+    s_fps_original = original;
+    eglSwapInterval(eglGetDisplay(EGL_DEFAULT_DISPLAY), original ? 1 : 2);
+    l_info("FPS mode: %s (swap interval %d)", original ? "60 FPS (ORIGINAL)" : "30 FPS", original ? 1 : 2);
+}
+
+int gles_get_fps_mode(void) {
+    return s_fps_original;
+}
+
 void gles_init(void) {
     vglUseTripleBuffering(GL_FALSE);
     vglInitExtended(0, SCR_W, SCR_H, 8 * 1024 * 1024, SCE_GXM_MULTISAMPLE_NONE);
     glGenTextures(1, &fbo_tex);
     glBindTexture(GL_TEXTURE_2D, fbo_tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, FB_W, FB_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_tex, 0);
@@ -217,7 +231,8 @@ void gles_init(void) {
     glViewport(0, 0, FB_W, FB_H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
-    l_info("vitaGL: FBO %ux%u -> pantalla %ux%u en x=%d", FB_W, FB_H, DST_W, DST_H, DST_X);
+    eglSwapInterval(eglGetDisplay(EGL_DEFAULT_DISPLAY), s_fps_original ? 1 : 2);
+    l_info("vitaGL: FBO %ux%u -> pantalla %ux%u", FB_W, FB_H, SCR_W, SCR_H);
 }
 
 void gles_present(void) {
@@ -246,10 +261,21 @@ void gles_present(void) {
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisableClientState(GL_COLOR_ARRAY);
     glDisableClientState(GL_NORMAL_ARRAY);
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
+    float rx, ry, rw, rh;
+    graphics_enhancer_get_render_bounds(&rx, &ry, &rw, &rh);
+    GLenum filter_mode = graphics_enhancer_get_gl_filter();
+    float cm = graphics_enhancer_get_color_mult();
 
     glBindTexture(GL_TEXTURE_2D, fbo_tex);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter_mode);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter_mode);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glColor4f(cm, cm, cm, 1.0f);
+
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
@@ -259,14 +285,30 @@ void gles_present(void) {
     glLoadIdentity();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+
     // Esquinas de pantalla (sup-izq, sup-der, inf-izq, inf-der) -> textura del FBO vertical.
-    // ponytail: rotación supuesta (landscape-right: el borde superior del FBO queda a la
-    // izquierda); si la imagen sale girada/espejada, se corrige solo esta tabla de UVs.
     static const float uv[] = {1, 1, 1, 0, 0, 1, 0, 0};
-    const float xy[] = {DST_X, 0, DST_X + DST_W, 0, DST_X, SCR_H, DST_X + DST_W, SCR_H};
+    const float xy[] = {rx, ry, rx + rw, ry, rx, ry + rh, rx + rw, ry + rh};
     glVertexPointer(2, GL_FLOAT, 0, xy);
     glTexCoordPointer(2, GL_FLOAT, 0, uv);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    if (controls_menu_active()) { // menú del port encima del último frame del juego
+        static const float muv[] = {0, 0, 1, 0, 0, 1, 1, 1};
+        static const float mxy[] = {0, 0, SCR_W, 0, 0, SCR_H, SCR_W, SCR_H};
+        GLint bs, bd;
+        glGetIntegerv(GL_BLEND_SRC, &bs);
+        glGetIntegerv(GL_BLEND_DST, &bd);
+        glBindTexture(GL_TEXTURE_2D, controls_menu_texture());
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glVertexPointer(2, GL_FLOAT, 0, mxy);
+        glTexCoordPointer(2, GL_FLOAT, 0, muv);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBlendFunc(bs, bd);
+    }
     vglSwapBuffers(ime_active()); // GL_TRUE mientras hay un diálogo del sistema abierto
 
     // Restaurar lo que el juego tenía.

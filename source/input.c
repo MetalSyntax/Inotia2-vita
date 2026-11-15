@@ -1,11 +1,15 @@
 // Touch + botones de la Vita -> eventos del motor, replicando -[EAGLView touchesBegan/Moved/Ended]:
 // primero el pad virtual (VP_*); si no consumió el toque, handleCletEvent + EVENT_POINT_*.
-// Coordenadas del juego: apaisado 480x320, como se ve en pantalla (gles.c lo dibuja en
-// 960x544, estirado a pantalla completa).
+// Coordenadas del juego: apaisado 480x320, como se ve en pantalla (gles.c lo dibuja con
+// viewport dinámico según el modo de aspecto configurado en graphics_enhancer).
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 #include <string.h>
 
+#include <psp2/kernel/processmgr.h>
+
+#include "controls.h"
+#include "graphics_enhancer.h"
 #include "hle.h"
 #include "macho.h"
 
@@ -14,9 +18,6 @@
 #define TOUCH_RELEASE 0x80000004
 #define KEY_PRESS 2
 #define KEY_RELEASE 3
-
-#define DST_W 960
-#define DST_X 0
 
 static void *vp_touch, *vp_move, *vp_release, *clet_event, *ev_press, *ev_move, *ev_release;
 static uint8_t *sleep_key;
@@ -28,7 +29,7 @@ static int nprev;
 static uint32_t prev_buttons;
 
 // Códigos WIPI para navegación de menús con cruceta/OK
-static const struct {
+static struct {
     uint32_t button;
     int key;
 } keymap[] = {
@@ -43,22 +44,25 @@ static const struct {
 #define VP_OBJS 30
 #define VP_OBJ_SIZE 0x88
 
-static const struct {
-    uint32_t button;
-    int type;
-} vbuttons[] = {
-    {SCE_CTRL_CROSS, -5},         // ataque (solo en el modo con pad)
-    {SCE_CTRL_SQUARE, 0x34},      // habilidad 1
-    {SCE_CTRL_TRIANGLE, 0x35},    // habilidad 2
-    {SCE_CTRL_CIRCLE, 0x36},      // habilidad 3
-    {SCE_CTRL_RTRIGGER, 0x37},    // habilidad 4
-    {SCE_CTRL_LTRIGGER, 0x38},    // ranura de objeto
-    {SCE_CTRL_START, 0x64},       // dragón: menú
-    {SCE_CTRL_SELECT, 0x65},      // icono sup. derecho
+// Acción (controls.h) -> tipo de botón del pad virtual; el botón físico sale de controls.txt.
+static const int vtypes[ACT_COUNT] = {
+    -5,   // ataque (solo en el modo con pad)
+    0x34, // habilidad 1
+    0x35, // habilidad 2
+    0x36, // habilidad 3
+    0x37, // habilidad 4
+    0x38, // ranura de objeto
+    0x64, // dragón: menú
+    0x65, // icono sup. derecho
 };
 static struct {
     int x, y;
-} vpressed[sizeof(vbuttons) / sizeof(vbuttons[0])];
+} vpressed[ACT_COUNT];
+// START/SELECT tocan al soltar (START+SELECT abre el menú del port sin tocar nada): toque
+// diferido que se suelta 100 ms después, para que el juego lo vea en algún tick.
+#define COMBO (SCE_CTRL_START | SCE_CTRL_SELECT)
+static int combo_used;
+static uint64_t tap_until[ACT_COUNT];
 static uint8_t *vp_objs;
 
 static int vp_find(int type, int *x, int *y) {
@@ -85,12 +89,19 @@ void input_init(void) {
     ev_release = (void *)macho_sym("_EVENT_POINT_RELEASE");
     sleep_key = (uint8_t *)macho_sym("_g_SleepKey");
     vp_objs = (uint8_t *)macho_sym("_VP_objList");
+    for (int k = 0; k < ACT_COUNT; k++)
+        vpressed[k].x = -1;
 }
 
 static void to_game(const SceTouchReport *r, int *x, int *y) {
-    int gx = (r->x / 2 - DST_X) * 480 / DST_W, gy = r->y / 2 * 320 / 544;
-    *x = gx < 0 ? 0 : gx > 479 ? 479 : gx;
-    *y = gy < 0 ? 0 : gy > 319 ? 319 : gy;
+    float rx, ry, rw, rh;
+    graphics_enhancer_get_render_bounds(&rx, &ry, &rw, &rh);
+    float tx = (float)(r->x / 2);
+    float ty = (float)(r->y / 2);
+    float gx = (tx - rx) * 480.0f / rw;
+    float gy = (ty - ry) * 320.0f / rh;
+    *x = gx < 0.0f ? 0 : gx > 479.0f ? 479 : (int)gx;
+    *y = gy < 0.0f ? 0 : gy > 319.0f ? 319 : (int)gy;
 }
 
 static void point(void *vp, uint32_t type, void *ev, int x, int y) {
@@ -98,6 +109,21 @@ static void point(void *vp, uint32_t type, void *ev, int x, int y) {
         call_guest(clet_event, type, x, y, 0);
         call_guest(ev, x, y, 0, 0);
     }
+}
+
+static uint32_t read_buttons(void) {
+    SceCtrlData pad;
+    sceCtrlPeekBufferPositive(0, &pad, 1);
+    uint32_t buttons = pad.buttons;
+    if (pad.lx < 64)
+        buttons |= SCE_CTRL_LEFT;
+    else if (pad.lx > 192)
+        buttons |= SCE_CTRL_RIGHT;
+    if (pad.ly < 64)
+        buttons |= SCE_CTRL_UP;
+    else if (pad.ly > 192)
+        buttons |= SCE_CTRL_DOWN;
+    return buttons;
 }
 
 void input_poll(void) {
@@ -133,35 +159,87 @@ void input_poll(void) {
         to_game(&t.report[i], &prev[i].x, &prev[i].y);
     }
 
-    SceCtrlData pad;
-    sceCtrlPeekBufferPositive(0, &pad, 1);
-    uint32_t buttons = pad.buttons;
-    if (pad.lx < 64)
-        buttons |= SCE_CTRL_LEFT;
-    else if (pad.lx > 192)
-        buttons |= SCE_CTRL_RIGHT;
-    if (pad.ly < 64)
-        buttons |= SCE_CTRL_UP;
-    else if (pad.ly > 192)
-        buttons |= SCE_CTRL_DOWN;
-
+    uint32_t buttons = read_buttons();
     uint32_t changed = buttons ^ prev_buttons;
+    uint32_t pressed = buttons & changed;
+
+    // Start + Select abre el menú de opciones del port
+    if ((buttons & COMBO) == COMBO && !combo_used) {
+        combo_used = 1;
+        prev_buttons = buttons;
+        controls_menu_open();
+        return;
+    }
+
+    // Atajos de mejoras gráficas (Hotkeys):
+    // Mantener L + R + TRIANGLE -> Rotar filtros gráficos
+    // Mantener L + R + SQUARE   -> Rotar modo de relación de aspecto
+    if ((buttons & SCE_CTRL_LTRIGGER) && (buttons & SCE_CTRL_RTRIGGER)) {
+        if (pressed & SCE_CTRL_TRIANGLE) {
+            combo_used = 1;
+            graphics_enhancer_cycle_filter();
+            controls_save();
+        }
+        if (pressed & SCE_CTRL_SQUARE) {
+            combo_used = 1;
+            graphics_enhancer_cycle_aspect();
+            controls_save();
+        }
+    }
+
+    // Select + R -> Alternar modo FPS (30 FPS cap <-> 60 FPS / ORIGINAL)
+    if ((buttons & SCE_CTRL_SELECT) && (pressed & SCE_CTRL_RTRIGGER)) {
+        combo_used = 1;
+        controls_toggle_fps();
+    }
+
+    keymap[4].button = controls_binding(ACT_ATTACK); // OK de los menús del juego = ataque
     for (unsigned k = 0; k < sizeof(keymap) / sizeof(keymap[0]); k++)
         if (changed & keymap[k].button)
             call_guest(clet_event, (buttons & keymap[k].button) ? KEY_PRESS : KEY_RELEASE, keymap[k].key, 0, 0);
 
-    for (unsigned k = 0; k < sizeof(vbuttons) / sizeof(vbuttons[0]); k++) {
-        if (!(changed & vbuttons[k].button))
-            continue;
-        if (buttons & vbuttons[k].button) {
+    uint64_t now = sceKernelGetProcessTimeWide();
+    for (int k = 0; k < ACT_COUNT; k++) {
+        uint32_t b = controls_binding(k);
+        int tap = (b & COMBO) != 0;
+        if (tap && tap_until[k] && now >= tap_until[k]) { // fin del toque diferido
+            tap_until[k] = 0;
+            if (vpressed[k].x >= 0 && live)
+                point(vp_release, TOUCH_RELEASE, ev_release, vpressed[k].x, vpressed[k].y);
             vpressed[k].x = -1;
-            if (live && vp_find(vbuttons[k].type, &vpressed[k].x, &vpressed[k].y))
-                point(vp_touch, TOUCH_PRESS, ev_press, vpressed[k].x, vpressed[k].y);
-        } else if (vpressed[k].x >= 0) {
+        }
+        if (!(changed & b))
+            continue;
+        int down = (buttons & b) != 0;
+        if (tap ? (!down && !combo_used && !tap_until[k]) : down) {
+            vpressed[k].x = -1;
+            if (live) {
+                if (vp_find(vtypes[k], &vpressed[k].x, &vpressed[k].y)) {
+                    point(vp_touch, TOUCH_PRESS, ev_press, vpressed[k].x, vpressed[k].y);
+                } else if (k == ACT_MENU) {
+                    // El menú del juego está abierto (el botón dragón 0x64 está oculto) ->
+                    // cerrar menú tocando el botón Salir / Exit (MMrect2[3] en x=242, y=279).
+                    vpressed[k].x = 242;
+                    vpressed[k].y = 279;
+                    point(vp_touch, TOUCH_PRESS, ev_press, 242, 279);
+                }
+            }
+            if (tap)
+                tap_until[k] = now + 100000;
+        } else if (!tap && vpressed[k].x >= 0) {
             if (live)
                 point(vp_release, TOUCH_RELEASE, ev_release, vpressed[k].x, vpressed[k].y);
             vpressed[k].x = -1;
         }
     }
+    if (!(buttons & (COMBO | SCE_CTRL_LTRIGGER | SCE_CTRL_RTRIGGER)))
+        combo_used = 0;
     prev_buttons = buttons;
+}
+
+// Con el menú del port abierto: solo los flancos de presión van al menú.
+int input_menu_poll(void) {
+    uint32_t buttons = read_buttons(), pressed = buttons & ~prev_buttons;
+    prev_buttons = buttons;
+    return controls_menu_update(pressed);
 }

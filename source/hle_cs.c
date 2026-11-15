@@ -15,6 +15,7 @@
 #include <time.h>
 
 #include "cgbi.h"
+#include "controls.h"
 #include "gles.h"
 #include "hle.h"
 #include "imports.h"
@@ -272,9 +273,11 @@ static int util_CreateTextureData(int *info, const void *data, int len, int flag
 static char *res_paths[MAX_RES];
 
 static int cs_knlGetResourceID(const char *name, int *size) {
-    static const char *dirs[] = {BUNDLE_PATH "English.lproj/", BUNDLE_PATH};
+    // Textos traducidos (controls.c): solo el par inglés strindex.dat/strdata.dat, el original no se toca.
+    const char *lang = strcmp(name, "strindex.dat") && strcmp(name, "strdata.dat") ? NULL : controls_lang_path();
+    const char *dirs[] = {lang ? lang : BUNDLE_PATH "English.lproj/", BUNDLE_PATH "English.lproj/", BUNDLE_PATH};
     *size = 0;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         char p[512];
         snprintf(p, sizeof(p), "%s%s", dirs[i], name);
         SceIoStat st;

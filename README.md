@@ -28,6 +28,7 @@ The game boots, loads assets, navigates menus, creates/loads character slots, an
 - [x] **Text & Fonts**: UIKit text rendering is backed by FreeType with PS Vita system fonts (Latin, Korean, Japanese), plus system keyboard integration. *Verified on console.*
 - [x] **Audio**: FMOD Ex runs natively (BGM and sound effects in menus and in-game) with CoreAudio redirected to `sceAudioOut`. FMOD's VFPv2 vector-mode mixers, unsupported on the Cortex-A9, are replaced with scalar versions. *Verified on console.*
 - [x] **Settings & saves**: game options (control type, auto-save, volume) and save games persist between sessions. *Verified on console.*
+- [ ] **Spanish / Portuguese + options menu**: live text-language switch and button remapping from a Start + Select overlay. *Builds; needs a console test.*
 - [ ] **Videos**: `prologue.mp4` / `epilogue.mp4` are currently skipped.
 - [x] **Offline bypasses**: App Store, "More Games", network, browser links, and anti-piracy checks are gracefully bypassed.
 
@@ -74,11 +75,43 @@ This software does NOT contain original game code, binaries, copyrighted graphic
 | **Circle (●)** | Skill 3 (Upper active skill) | ✅ Working |
 | **L Trigger** | Potion / Quick Item slot | ✅ Working |
 | **R Trigger** | Skill Wheel Switch / Special | ✅ Working |
-| **Start** | Inventory / Status Menu | ✅ Working |
-| **Select** | Minimap / World Map | ✅ Working |
+| **Start** | Inventory / Dragon Menu (open/close on release) | ✅ Working |
+| **Select** | Minimap / World Map (on release) | ✅ Working |
+| **Start + Select** | Port options & enhancements menu (game paused) | ✅ Working |
+| **Select + R** | Quick Hotkey: Toggle FPS mode (30 FPS ↔ 60 FPS) | ✅ Working |
+| **L + R + Triangle** | Quick Hotkey: Cycle Graphics Filter | ✅ Working |
+| **L + R + Square** | Quick Hotkey: Cycle Aspect Ratio Mode | ✅ Working |
+
+### Port options menu (Start + Select)
+
+The game pauses and an overlay lists:
+
+- **Button remapping**: Attack / OK, Skill 1–4, Quick item, Menu and Map can be moved to any face button, L, R, Start or Select (one button per action; picking a button that is already used swaps both). D-pad / left stick stay as movement. Saved to `ux0:data/inotia2/controls.txt` (hand-editable: `ACTION = BUTTON` per line).
+- **Text language**: ENGLISH / ESPAÑOL / PORTUGUÊS (see below).
+- **Target Frame Rate**: 30 FPS (Battery Saver, `eglSwapInterval(2)`) or 60 FPS (ORIGINAL, `eglSwapInterval(1)`).
+- **Graphics Filter**:
+  - `Sharp Pixel-Art 2x (Crisp)`: Nearest-neighbor filtering for razor-sharp pixel graphics.
+  - `Smooth Bilinear 2x`: Bilinear filtering for smooth lines.
+  - `Vibrant OLED/LCD (Crisp)`: Sharp pixel art with +15% enhanced color vibrancy and contrast.
+  - `Vibrant OLED/LCD (Smooth)`: Smooth bilinear with +15% enhanced color vibrancy and contrast.
+- **Aspect Ratio**:
+  - `Aspect Ratio 3:2 Fit (816x544)`: Original 3:2 iPhone aspect ratio preserving pixel geometry with minimal side borders.
+  - `Fullscreen Stretch (960x544)`: Stretched across the full 16:9 Vita screen.
+  - `Integer 1x Center (480x320)`: Exact 1x native pixel resolution centered.
+- **Restore defaults**.
+
+Controls: **✖** / **◄ ►** change & toggle, **●** / **START** save & close. Start and Select act when released, so combos never accidentally trigger game actions. In-game, pressing **START** also cleanly closes the dragon menu when open.
 
 > [!TIP]
 > The original game was designed for full touch input. All UI buttons and virtual controls on the screen can be touched directly at any time.
+
+### Text language
+
+The **Text language** row of the Start + Select menu switches the game text between **English, Spanish and Portuguese, live** (the texts are reloaded when the menu closes; a dialogue box that was already open keeps the old language until it is reopened). The choice is saved as `LANG = EN|ES|PT` in `controls.txt`.
+
+It needs the translation pack `inotia2_vita_traduccion_ES_PT.zip` (distributed separately): extract it into `ux0:data/` so you get `ux0:data/inotia2/lang/spa/` and `.../lang/por/`. The original `Inotia2.app` is never modified; without the pack the game stays in English. The pack translates all 3,498 text strings of the game: menus, system messages and popups, items, skills, monsters, NPCs, maps, quests, help pages and the full story dialogue (missing strings always fall back to English). Image-based texts (title logo, user agreement) stay in English.
+
+Developers: `scripts/inotia2_lang.py` exports translation templates (`export es|pt`), builds the pack and the zip (`build es|pt`), reports token/length problems (`check es|pt`) and self-tests the format (`test`, identity repack is byte-identical to the original).
 
 ---
 

@@ -234,6 +234,21 @@ static void draw_text(cg_ctx *c, const char *s, int x, int y, int size) {
     }
 }
 
+// Texto del menú del port (controls.c) sobre un buffer RGBA (ABGR en memoria), mismas fuentes.
+void ui_text_rgba(uint32_t *px, int pw, int ph, int x, int y, int size, uint32_t color, const char *s) {
+    int pen = x, base = y + size;
+    for (const unsigned char *p = (const unsigned char *)s; *p;) {
+        const glyph *g = get_glyph(size, utf8_next(&p));
+        for (int gy = 0; gy < g->h; gy++)
+            for (int gx = 0; gx < g->w; gx++) {
+                int row = base - g->top + gy, col = pen + g->left + gx;
+                if (row >= 0 && row < ph && col >= 0 && col < pw && g->bmp[gy * g->w + gx] > 96)
+                    px[row * pw + col] = color;
+            }
+        pen += g->adv;
+    }
+}
+
 // ---------------------------------------------------------------- entrada de texto (IME)
 
 static int ime_type = -1;

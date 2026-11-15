@@ -75,3 +75,48 @@ Detalle y arquitectura en `PORTING_PLAN.md`.
   - Solución: `macho_prep.py` ahora conserva de forma estricta todo destino exacto a función o símbolo (`func`, `sym`, `cstr`), y `source/macho.c` aplica una lista de salvaguarda `extra_rebases[]` garantizando rebase automático en memoria.
 - [x] **HITO ALCANZADO: ¡EL JUEGO ES JUGABLE EN HARDWARE REAL!**
 
+
+## Idiomas ES/PT + menú de opciones (2026-11-13, sin probar en consola)
+
+- [x] **Formato de textos**: todo el texto del juego (menús, objetos, habilidades, misiones, ayuda,
+  diálogos) está en `strindex.dat` (u32 BE n + n×{name[32], u32 LE inicio, u32 LE fin}) +
+  `strdata.dat` (UTF-8 con NUL). No es el `memorytext` de Inotia 4. `LoadString` busca cada tabla por
+  nombre y copia `fin-inicio` bytes al heap de medios (`SetMediaSize`, ~7 MB libres): el largo es libre.
+  El motor avanza UTF-8 bien (`Str_Split`/`Text_*` miran 0xC0/0xE0/0xF0) y FreeType dibuja acentos:
+  no hace falta plegar a ASCII como en Zenonia 2. No hay textos de UI en el binario fuera de esas tablas
+  (solo imágenes: logo, agree_en.png).
+- [x] **Redirección** (`hle_cs.c`, `CS_knlGetResourceID`): solo `strindex.dat`/`strdata.dat` se sirven
+  desde `ux0:data/inotia2/lang/{spa,por}/` si existen; si no, inglés del bundle (que nunca se toca).
+- [x] **Cambio en vivo**: al cerrar el menú con otro idioma se llama otra vez a `_LoadString` (reusa o
+  realoja cada string con `SetMediaSize`). Lo ya armado en pantalla (diálogo abierto) queda en el idioma
+  anterior hasta reabrirlo.
+- [x] **Menú START+SELECT** (`controls.c`, juego en pausa, overlay 960×544 con FreeType sobre el último
+  frame en `gles_present`): reasignar Ataque/OK, Habilidad 1–4, Objeto, Menú, Mapa (un botón por acción,
+  intercambio si ya está usado), idioma, valores por defecto. Persistencia en `controls.txt`
+  (`ACCION = BOTON`, `LANG = EN|ES|PT`). START/SELECT tocan al soltar (toque de 100 ms) para que el combo
+  no abra el menú del juego.
+- [x] **Mejoras Gráficas y Rendimiento (como Zenonia 2 y Destinia)**:
+  - **Filtros Gráficos**: Sharp Pixel-Art (Nearest-neighbor 2x), Smooth Bilinear, Vibrant OLED Crisp (+15% brillo/contraste), Vibrant OLED Smooth.
+  - **Relación de Aspecto (Aspect Ratio)**: 3:2 Fit nativo (816×544 con bandas laterales limpias), Fullscreen Stretch (960×544), Integer 1x Centrado (480×320). La calibración táctil (`to_game` en `input.c`) escala dinámicamente según el viewport activo.
+  - **Optimizaciones de FPS**: selector entre 30 FPS (Battery Saver, `eglSwapInterval(2)`) y 60 FPS / ORIGINAL (`eglSwapInterval(1)`).
+  - **Atajos rápidos (Hotkeys)**:
+    - `Select + R`: alternar entre 30 FPS y 60 FPS.
+    - `L + R + Triangle`: rotar filtros gráficos.
+    - `L + R + Square`: rotar modo de aspecto.
+  - **Cierre de menú con START**:
+    - En el menú del port (START+SELECT): tanto **START** como **Círculo** guardan y cierran el menú.
+    - En el menú del juego (menú dragón): al pulsar **START** con el menú abierto (botón dragón 0x64 oculto), se activa automáticamente el botón Salir / Exit (`MMrect2[3]` en coordenadas `x=242, y=279`), cerrando el menú de inmediato sin necesidad de tocar la pantalla táctil.
+  - **Persistencia**: `controls.txt` almacena `FPS = 30|ORIGINAL`, `FILTER = N` y `ASPECT = N`.
+- [x] **Herramienta** `scripts/inotia2_lang.py` (`export|build|check es|pt`, `test` = reempaquetado
+  idéntico byte a byte). Plantillas en `inotia2_translation/{es,pt}/NN_<grupo>.json` (no van a git);
+  glosario de nombres en `inotia2_translation/_glossary_{es,pt}.json`. Paquete:
+  `build/inotia2_vita_traduccion_ES_PT.zip` (`inotia2/lang/{spa,por}/`, se extrae en `ux0:data/`).
+- [x] **Traducido completo (ES y PT, 3498/3498 cadenas cada uno, 0 rechazadas por `check`)**: glosario de
+  nombres (1591: objetos, habilidades, monstruos, NPC, mapas, clases, títulos de misiones, tiendas), UI/sistema
+  (TextStr, Symbol, WV_CONST, opciones, popups), ayuda, descripciones de objetos/habilidades/clases, carteles,
+  NPC, NScroll, misiones (Begin/EndDesc) y todo el diálogo de historia (EvtDlg, DlgProc, DlgSel). Nombres propios
+  de personajes y lugares quedan como en inglés (Bronzebeard, Goldhammer, Stonehammer, Luone...). El texto
+  traducido quedó algo más corto que el inglés (ES 170 KB / PT 167 KB vs 174 KB).
+- El checker de tokens ya no toma "5% of" como printf (sin flag de espacio): solo `%d`, `%s`, `%02d`, `%%`...
+- [ ] **Probar en consola**: abrir/cerrar menú, reasignar, cambiar idioma en el título y en partida,
+  diálogos largos (que los textos más largos no desborden cajas), nombres de objetos en tienda/inventario.

@@ -23,3 +23,4 @@ void ime_poll(void);
 // input.c: touch + botones -> eventos del motor.
 void input_init(void);
 void input_poll(void);
+int input_menu_poll(void); // menú del port abierto (controls.c); 1 al cerrarse
