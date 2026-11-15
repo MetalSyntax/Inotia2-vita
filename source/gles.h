@@ -6,6 +6,6 @@ void gles_init(void);
 void gles_present(void);
 uint32_t gles_get_draw_calls(void);
 
-// 0 = 30 FPS cap (interval=2), 1 = 60 FPS / ORIGINAL (interval=1)
-void gles_set_fps_mode(int original);
+// 0 = 20 FPS (ORIGINAL), 1 = 30 FPS (Forced), 2 = 60 FPS (Forced)
+void gles_set_fps_mode(int mode);
 int gles_get_fps_mode(void);

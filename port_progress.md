@@ -98,15 +98,25 @@ Detalle y arquitectura en `PORTING_PLAN.md`.
 - [x] **Mejoras Gráficas y Rendimiento (como Zenonia 2 y Destinia)**:
   - **Filtros Gráficos**: Sharp Pixel-Art (Nearest-neighbor 2x), Smooth Bilinear, Vibrant OLED Crisp (+15% brillo/contraste), Vibrant OLED Smooth.
   - **Relación de Aspecto (Aspect Ratio)**: 3:2 Fit nativo (816×544 con bandas laterales limpias), Fullscreen Stretch (960×544), Integer 1x Centrado (480×320). La calibración táctil (`to_game` en `input.c`) escala dinámicamente según el viewport activo.
-  - **Optimizaciones de FPS**: selector entre 30 FPS (Battery Saver, `eglSwapInterval(2)`) y 60 FPS / ORIGINAL (`eglSwapInterval(1)`).
+  - **Optimizaciones de FPS y escalado de timers**:
+    - El motor original de Com2uS fija el bucle de juego con un temporizador WIPI de 50 ms (`1000 / 50 = 20 FPS`). Por tanto, cambiar únicamente el swap interval de EGL mantenía el juego limitado a 20 FPS.
+    - Se implementó escalado dinámico de temporizadores en `cs_knlSetTimer()` (`source/hle_cs.c`):
+      - `20 FPS (ORIGINAL)`: temporizador intacto a 50 ms (velocidad idéntica al original de iOS).
+      - `30 FPS (Forced)`: temporizadores escalados por factor 20/30 (~33 ms), acelerando los ticks de lógica y render a 30 FPS fluidos.
+      - `60 FPS (Forced)`: temporizadores escalados por factor 20/60 (~16 ms), forzando el bucle a 60 FPS ultra fluidos.
+  - **Ocultamiento de Botones Virtuales (HUD Limpio con 0% de opacidad)**:
+    - Se parchea dinámicamente la función de renderizado de la cruceta táctil, botones de acción y poderes (`_VP_drawObjects` en `0x000499bc`): se escribe `0x4770` (`bx lr`) para ocultarlos completamente (0% de opacidad), o `0xb580` (`push {r7, lr}`) para restaurarlos.
+    - El área táctil y los objetos de control en `_VP_objList` permanecen intactos, permitiendo usar los botones físicos con una pantalla de juego totalmente limpia sin HUD invasivo.
+    - Se puede alternar desde el menú de opciones (Start+Select) o instantáneamente con el atajo `L + R`.
   - **Atajos rápidos (Hotkeys)**:
-    - `Select + R`: alternar entre 30 FPS y 60 FPS.
+    - `L + R`: alternar visibilidad de botones virtuales / HUD (0% de opacidad).
+    - `Select + R`: alternar entre 20 FPS ORIGINAL, 30 FPS y 60 FPS.
     - `L + R + Triangle`: rotar filtros gráficos.
     - `L + R + Square`: rotar modo de aspecto.
   - **Cierre de menú con START**:
     - En el menú del port (START+SELECT): tanto **START** como **Círculo** guardan y cierran el menú.
-    - En el menú del juego (menú dragón): al pulsar **START** con el menú abierto (botón dragón 0x64 oculto), se activa automáticamente el botón Salir / Exit (`MMrect2[3]` en coordenadas `x=242, y=279`), cerrando el menú de inmediato sin necesidad de tocar la pantalla táctil.
-  - **Persistencia**: `controls.txt` almacena `FPS = 30|ORIGINAL`, `FILTER = N` y `ASPECT = N`.
+    - En el menú del juego (menú dragón): se detecta el estado abierto mediante `_GetUIViewOpen()` y la variable interna `_g_uiView`. Al pulsar **START** con el menú abierto, se ejecutan `_VP_UIresume()`, `_SetUIViewOpen(0)`, `_ChangeGameState(2)` y `_DoPlaySound(4)`, cerrando el menú limpiamente, restaurando los controles del juego y reproduciendo el sonido de cierre original.
+  - **Persistencia**: `controls.txt` almacena `FPS = 20|30|60`, `VBUTTONS = SHOWN|HIDDEN`, `FILTER = N` y `ASPECT = N`.
 - [x] **Herramienta** `scripts/inotia2_lang.py` (`export|build|check es|pt`, `test` = reempaquetado
   idéntico byte a byte). Plantillas en `inotia2_translation/{es,pt}/NN_<grupo>.json` (no van a git);
   glosario de nombres en `inotia2_translation/_glossary_{es,pt}.json`. Paquete:

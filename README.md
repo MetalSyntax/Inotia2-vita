@@ -75,10 +75,11 @@ This software does NOT contain original game code, binaries, copyrighted graphic
 | **Circle (●)** | Skill 3 (Upper active skill) | ✅ Working |
 | **L Trigger** | Potion / Quick Item slot | ✅ Working |
 | **R Trigger** | Skill Wheel Switch / Special | ✅ Working |
-| **Start** | Inventory / Dragon Menu (open/close on release) | ✅ Working |
+| **Start** | Inventory / Dragon Menu (opens and closes cleanly) | ✅ Working |
 | **Select** | Minimap / World Map (on release) | ✅ Working |
 | **Start + Select** | Port options & enhancements menu (game paused) | ✅ Working |
-| **Select + R** | Quick Hotkey: Toggle FPS mode (30 FPS ↔ 60 FPS) | ✅ Working |
+| **L + R** | Quick Hotkey: Toggle Virtual Buttons / HUD (0% opacity) | ✅ Working |
+| **Select + R** | Quick Hotkey: Cycle FPS mode (20 FPS ↔ 30 FPS ↔ 60 FPS) | ✅ Working |
 | **L + R + Triangle** | Quick Hotkey: Cycle Graphics Filter | ✅ Working |
 | **L + R + Square** | Quick Hotkey: Cycle Aspect Ratio Mode | ✅ Working |
 
@@ -88,7 +89,11 @@ The game pauses and an overlay lists:
 
 - **Button remapping**: Attack / OK, Skill 1–4, Quick item, Menu and Map can be moved to any face button, L, R, Start or Select (one button per action; picking a button that is already used swaps both). D-pad / left stick stay as movement. Saved to `ux0:data/inotia2/controls.txt` (hand-editable: `ACTION = BUTTON` per line).
 - **Text language**: ENGLISH / ESPAÑOL / PORTUGUÊS (see below).
-- **Target Frame Rate**: 30 FPS (Battery Saver, `eglSwapInterval(2)`) or 60 FPS (ORIGINAL, `eglSwapInterval(1)`).
+- **Target Frame Rate**:
+  - `20 FPS (ORIGINAL)`: Native Com2uS 50ms game tick interval.
+  - `30 FPS (Forced)`: Scaled 33ms game ticks for a smoother, accelerated experience.
+  - `60 FPS (Forced)`: Scaled 16ms game ticks for maximum smoothness.
+- **Virtual Buttons (HUD)**: `SHOWN` or `HIDDEN` (toggles on-screen D-pad and action/skill buttons with 0% opacity via runtime hook, leaving a clean gameplay view while preserving touch capabilities). Can also be toggled anytime with the `L + R` hotkey combo.
 - **Graphics Filter**:
   - `Sharp Pixel-Art 2x (Crisp)`: Nearest-neighbor filtering for razor-sharp pixel graphics.
   - `Smooth Bilinear 2x`: Bilinear filtering for smooth lines.

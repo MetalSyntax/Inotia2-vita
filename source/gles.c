@@ -204,16 +204,16 @@ static void g_glGetRenderbufferParameterivOES(GLenum target, GLenum pname, GLint
 
 // ---------------------------------------------------------------- init / present
 
-static int s_fps_original = 0;
+static int s_fps_mode = 0;
 
-void gles_set_fps_mode(int original) {
-    s_fps_original = original;
-    eglSwapInterval(eglGetDisplay(EGL_DEFAULT_DISPLAY), original ? 1 : 2);
-    l_info("FPS mode: %s (swap interval %d)", original ? "60 FPS (ORIGINAL)" : "30 FPS", original ? 1 : 2);
+void gles_set_fps_mode(int mode) {
+    s_fps_mode = mode;
+    eglSwapInterval(eglGetDisplay(EGL_DEFAULT_DISPLAY), 1);
+    l_info("FPS mode: %s", mode == 1 ? "30 FPS (Forced)" : mode == 2 ? "60 FPS (Forced)" : "20 FPS (ORIGINAL)");
 }
 
 int gles_get_fps_mode(void) {
-    return s_fps_original;
+    return s_fps_mode;
 }
 
 void gles_init(void) {
@@ -231,7 +231,7 @@ void gles_init(void) {
     glViewport(0, 0, FB_W, FB_H);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
-    eglSwapInterval(eglGetDisplay(EGL_DEFAULT_DISPLAY), s_fps_original ? 1 : 2);
+    eglSwapInterval(eglGetDisplay(EGL_DEFAULT_DISPLAY), 1);
     l_info("vitaGL: FBO %ux%u -> pantalla %ux%u", FB_W, FB_H, SCR_W, SCR_H);
 }
 

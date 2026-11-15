@@ -21,6 +21,20 @@
 
 static void *vp_touch, *vp_move, *vp_release, *clet_event, *ev_press, *ev_move, *ev_release;
 static uint8_t *sleep_key;
+static void *fn_get_uiview_open;
+static void *fn_set_uiview_open;
+static void *fn_vp_ui_resume;
+static void *fn_change_game_state;
+static void *fn_do_play_sound;
+static uint8_t *g_ui_view_ptr;
+
+static int is_ingame_menu_open(void) {
+    if (g_ui_view_ptr && *g_ui_view_ptr != 0)
+        return 1;
+    if (fn_get_uiview_open && call_guest(fn_get_uiview_open, 0, 0, 0, 0) != 0)
+        return 1;
+    return 0;
+}
 
 static struct {
     int id, x, y;
@@ -89,6 +103,12 @@ void input_init(void) {
     ev_release = (void *)macho_sym("_EVENT_POINT_RELEASE");
     sleep_key = (uint8_t *)macho_sym("_g_SleepKey");
     vp_objs = (uint8_t *)macho_sym("_VP_objList");
+    fn_get_uiview_open = (void *)macho_sym("_GetUIViewOpen");
+    fn_set_uiview_open = (void *)macho_sym("_SetUIViewOpen");
+    fn_vp_ui_resume = (void *)macho_sym("_VP_UIresume");
+    fn_change_game_state = (void *)macho_sym("_ChangeGameState");
+    fn_do_play_sound = (void *)macho_sym("_DoPlaySound");
+    g_ui_view_ptr = (uint8_t *)macho_sym("_g_uiView");
     for (int k = 0; k < ACT_COUNT; k++)
         vpressed[k].x = -1;
 }
@@ -171,23 +191,48 @@ void input_poll(void) {
         return;
     }
 
-    // Atajos de mejoras gráficas (Hotkeys):
+    // Hotkeys con gatillos L y R:
     // Mantener L + R + TRIANGLE -> Rotar filtros gráficos
     // Mantener L + R + SQUARE   -> Rotar modo de relación de aspecto
-    if ((buttons & SCE_CTRL_LTRIGGER) && (buttons & SCE_CTRL_RTRIGGER)) {
+    // Soltar L + R (sin triángulo ni cuadrado) -> Ocultar/mostrar botones virtuales (opacidad 0%)
+    static int lr_held = 0;
+    static int lr_sub_used = 0;
+    int lr_both = (buttons & SCE_CTRL_LTRIGGER) && (buttons & SCE_CTRL_RTRIGGER);
+    int prev_lr_both = (prev_buttons & SCE_CTRL_LTRIGGER) && (prev_buttons & SCE_CTRL_RTRIGGER);
+
+    if (lr_both) {
+        lr_held = 1;
+        // Si L o R tenían una pulsación en curso al entrar al combo, cancelarla para evitar toques residuales
+        for (int k = 0; k < ACT_COUNT; k++) {
+            uint32_t b = controls_binding(k);
+            if ((b & (SCE_CTRL_LTRIGGER | SCE_CTRL_RTRIGGER)) && vpressed[k].x >= 0) {
+                if (live)
+                    point(vp_release, TOUCH_RELEASE, ev_release, vpressed[k].x, vpressed[k].y);
+                vpressed[k].x = -1;
+            }
+        }
         if (pressed & SCE_CTRL_TRIANGLE) {
             combo_used = 1;
+            lr_sub_used = 1;
             graphics_enhancer_cycle_filter();
             controls_save();
         }
         if (pressed & SCE_CTRL_SQUARE) {
             combo_used = 1;
+            lr_sub_used = 1;
             graphics_enhancer_cycle_aspect();
             controls_save();
         }
+    } else if (prev_lr_both && lr_held) {
+        if (!lr_sub_used) {
+            combo_used = 1;
+            controls_toggle_vbuttons();
+        }
+        lr_held = 0;
+        lr_sub_used = 0;
     }
 
-    // Select + R -> Alternar modo FPS (30 FPS cap <-> 60 FPS / ORIGINAL)
+    // Select + R -> Alternar modo FPS (20 FPS ORIGINAL <-> 30 FPS <-> 60 FPS)
     if ((buttons & SCE_CTRL_SELECT) && (pressed & SCE_CTRL_RTRIGGER)) {
         combo_used = 1;
         controls_toggle_fps();
@@ -201,6 +246,9 @@ void input_poll(void) {
     uint64_t now = sceKernelGetProcessTimeWide();
     for (int k = 0; k < ACT_COUNT; k++) {
         uint32_t b = controls_binding(k);
+        // Si L y R están pulsados juntos, no disparar sus acciones de juego individuales
+        if (lr_both && (b & (SCE_CTRL_LTRIGGER | SCE_CTRL_RTRIGGER)))
+            continue;
         int tap = (b & COMBO) != 0;
         if (tap && tap_until[k] && now >= tap_until[k]) { // fin del toque diferido
             tap_until[k] = 0;
@@ -213,15 +261,19 @@ void input_poll(void) {
         int down = (buttons & b) != 0;
         if (tap ? (!down && !combo_used && !tap_until[k]) : down) {
             vpressed[k].x = -1;
-            if (live) {
+            if (k == ACT_MENU && is_ingame_menu_open()) {
+                // El menú del juego está abierto -> cerrarlo y volver al juego
+                if (fn_vp_ui_resume)
+                    call_guest(fn_vp_ui_resume, 0, 0, 0, 0);
+                if (fn_set_uiview_open)
+                    call_guest(fn_set_uiview_open, 0, 0, 0, 0);
+                if (fn_change_game_state)
+                    call_guest(fn_change_game_state, 2, 0, 0, 0);
+                if (fn_do_play_sound)
+                    call_guest(fn_do_play_sound, 4, 0, 0, 0);
+            } else if (live) {
                 if (vp_find(vtypes[k], &vpressed[k].x, &vpressed[k].y)) {
                     point(vp_touch, TOUCH_PRESS, ev_press, vpressed[k].x, vpressed[k].y);
-                } else if (k == ACT_MENU) {
-                    // El menú del juego está abierto (el botón dragón 0x64 está oculto) ->
-                    // cerrar menú tocando el botón Salir / Exit (MMrect2[3] en x=242, y=279).
-                    vpressed[k].x = 242;
-                    vpressed[k].y = 279;
-                    point(vp_touch, TOUCH_PRESS, ev_press, 242, 279);
                 }
             }
             if (tap)

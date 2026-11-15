@@ -339,10 +339,29 @@ static void cs_knlSetTimer(mc_timer *t, uint32_t ms_lo, uint32_t ms_hi, int para
     t->ms_hi = ms_hi;
     t->param = param;
     t->scheduled = 1;
+
+    // Escalar la frecuencia del timer según el modo de FPS configurado.
+    // El motor original de Com2uS fija el bucle de juego a 50 ms (20 FPS).
+    // Los modos forzados reducen el intervalo para despachar más ticks por segundo:
+    //   - Modo 0: 20 FPS original (50 ms)
+    //   - Modo 1: 30 FPS forzado (~33 ms, factor 20/30)
+    //   - Modo 2: 60 FPS forzado (~16 ms, factor 20/60)
+    int64_t effective_ms = ms;
+    int fps_mode = controls_get_fps_mode();
+    if (fps_mode == 1) {
+        effective_ms = (ms * 20 + 15) / 30;
+        if (effective_ms < 1 && ms > 0)
+            effective_ms = 1;
+    } else if (fps_mode == 2) {
+        effective_ms = (ms * 20 + 30) / 60;
+        if (effective_ms < 1 && ms > 0)
+            effective_ms = 1;
+    }
+
     int free_slot = -1;
     for (int i = 0; i < MAX_TIMERS; i++) {
         if (timers[i].t == t) {
-            timers[i].due = sceKernelGetProcessTimeWide() + ms * 1000 + 1;
+            timers[i].due = sceKernelGetProcessTimeWide() + effective_ms * 1000 + 1;
             return;
         }
         if (!timers[i].t && free_slot < 0)
@@ -351,7 +370,7 @@ static void cs_knlSetTimer(mc_timer *t, uint32_t ms_lo, uint32_t ms_hi, int para
     if (free_slot < 0)
         fatal_error("CS_knlSetTimer: más de %d timers", MAX_TIMERS);
     timers[free_slot].t = t;
-    timers[free_slot].due = sceKernelGetProcessTimeWide() + ms * 1000 + 1;
+    timers[free_slot].due = sceKernelGetProcessTimeWide() + effective_ms * 1000 + 1;
 }
 
 static void cs_knlUnsetTimer(mc_timer *t) {
