@@ -42,18 +42,47 @@ static const struct {
 static uint32_t binding[ACT_COUNT];
 
 static const struct {
-    const char *key, *label, *path;
+    const char *key, *label, *ux0_path, *app0_path;
 } langs[] = {
-    {"EN", "ENGLISH", NULL},
-    {"ES", "ESPAÑOL", DATA_PATH "lang/spa/"},
-    {"PT", "PORTUGUÊS", DATA_PATH "lang/por/"},
+    {"EN", "ENGLISH", NULL, NULL},
+    {"ES", "ESPAÑOL", DATA_PATH "lang/spa/", "app0:lang/spa/"},
+    {"PT", "PORTUGUÊS", DATA_PATH "lang/por/", "app0:lang/por/"},
 };
 #define LANG_COUNT (int)(sizeof(langs) / sizeof(langs[0]))
 static int lang, loaded_lang;
-static int g_fps_mode = 0;         // 0 = 20 FPS (ORIGINAL), 1 = 30 FPS (Forced), 2 = 60 FPS (Forced)
+static int g_fps_mode = 0;         // 0 = 20 FPS (ORIGINAL), 1 = 30 FPS (Mockup), 2 = 60 FPS (Mockup)
 static int g_vbuttons_visible = 0; // 0 = ocultos (opacidad 0%), 1 = visibles
 
-const char *controls_lang_path(void) { return langs[loaded_lang].path; }
+static int lang_installed(int l) {
+    if (!langs[l].ux0_path)
+        return 1;
+    char p[256];
+    snprintf(p, sizeof(p), "%sstrdata.dat", langs[l].ux0_path);
+    if (sceIoGetstat(p, &(SceIoStat){0}) >= 0)
+        return 1;
+    if (langs[l].app0_path) {
+        snprintf(p, sizeof(p), "%sstrdata.dat", langs[l].app0_path);
+        if (sceIoGetstat(p, &(SceIoStat){0}) >= 0)
+            return 1;
+    }
+    return 0;
+}
+
+const char *controls_lang_path(void) {
+    int l = loaded_lang;
+    if (!langs[l].ux0_path)
+        return NULL;
+    char p[256];
+    snprintf(p, sizeof(p), "%sstrdata.dat", langs[l].ux0_path);
+    if (sceIoGetstat(p, &(SceIoStat){0}) >= 0)
+        return langs[l].ux0_path;
+    if (langs[l].app0_path) {
+        snprintf(p, sizeof(p), "%sstrdata.dat", langs[l].app0_path);
+        if (sceIoGetstat(p, &(SceIoStat){0}) >= 0)
+            return langs[l].app0_path;
+    }
+    return NULL;
+}
 uint32_t controls_binding(int a) { return binding[a]; }
 
 int controls_get_fps_mode(void) {
@@ -90,12 +119,6 @@ void controls_set_vbuttons(int visible) {
 void controls_toggle_vbuttons(void) {
     controls_set_vbuttons(!g_vbuttons_visible);
     controls_save();
-}
-
-static int lang_installed(int l) {
-    char p[256];
-    snprintf(p, sizeof(p), "%sstrdata.dat", langs[l].path ? langs[l].path : BUNDLE_PATH);
-    return sceIoGetstat(p, &(SceIoStat){0}) >= 0;
 }
 
 static void set_defaults(void) {

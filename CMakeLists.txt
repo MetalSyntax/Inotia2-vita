@@ -100,6 +100,16 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   SceIme_stub
 )
 
+set(EXTRA_VPK_LANG)
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lang/spa/strindex.dat")
+  set(EXTRA_VPK_LANG
+    FILE lang/spa/strindex.dat lang/spa/strindex.dat
+    FILE lang/spa/strdata.dat lang/spa/strdata.dat
+    FILE lang/por/strindex.dat lang/por/strindex.dat
+    FILE lang/por/strdata.dat lang/por/strdata.dat
+  )
+endif()
+
 vita_create_self(eboot.bin ${CMAKE_PROJECT_NAME} UNSAFE NOASLR)
 vita_create_vpk(${VITA_VPKNAME}.vpk ${VITA_TITLEID} eboot.bin
   VERSION ${VITA_VERSION}
@@ -109,5 +119,6 @@ vita_create_vpk(${VITA_VPKNAME}.vpk ${VITA_TITLEID} eboot.bin
   FILE sce_sys/livearea/contents/bg0.png sce_sys/livearea/contents/bg0.png
   FILE sce_sys/livearea/contents/startup.png sce_sys/livearea/contents/startup.png
   FILE sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
+  ${EXTRA_VPK_LANG}
 )
 
