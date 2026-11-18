@@ -128,7 +128,7 @@ tools/stage_data.sh /path/to/Payload/Inotia2.app
   - Touchscreen coordinates dynamically scale and match each aspect mode.
   - Quick hotkey `L + R + Square` to cycle aspect ratio.
 * **Port Options & Button Remapping Menu**: Access via **Start + Select** (pauses the game). Allows live button remapping, audio/language selection, HUD visibility, filter, and aspect ratio. Saved to `ux0:data/inotia2/controls.txt`.
-* **Full Spanish & Portuguese Localization Support**: Ready for translated text packages (`lang/spa/` and `lang/por/`) with on-the-fly language switching.
+* **Full Spanish & Portuguese Translations**: Complete ES and PT translations (menus, items, skills, quests and all story dialogue) are bundled inside the VPK. Pick the language in the **Start + Select** menu; it switches on the fly. Custom files in `ux0:data/inotia2/lang/{spa,por}/` override the bundled ones.
 * **Target Frame Rate (UI Mockup)**: Added frame rate selector in options menu and `Select + R` hotkey (`20 FPS (ORIGINAL)`, `30 FPS (Mockup)`, `60 FPS (Mockup)`). *Note: The game engine natively runs at 20 FPS fixed ticks; higher framerate modes are experimental UI placeholders.*
 
 ## 📋 Changelog (v1.1-beta)
